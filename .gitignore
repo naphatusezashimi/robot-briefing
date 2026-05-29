@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Secrets / credentials — ห้ามขึ้น git เด็ดขาด
+.env
+.env.*
+!.env.example
+*credentials*.json
+*service-account*.json
+
+# ไฟล์เสียงที่ถูกสร้างระหว่างรัน
+*.wav
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,8 @@
+.env
+*credentials*.json
+*service-account*.json
+*.wav
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
