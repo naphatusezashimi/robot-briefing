@@ -35,6 +35,20 @@ def state_endpoint():
     return jsonify(state=state["value"])
 
 
+@app.post("/ask")
+def ask():
+    data = request.get_json(silent=True) or {}
+    question = (data.get("question") or "").strip()
+    state["value"] = "thinking"
+    try:
+        answer = ask_ai(question, college_data)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+        state["value"] = "answering"
+        return jsonify(answer=answer)
+    except Exception as e:
+        state["value"] = "error"
+        return jsonify(error=str(e)), 500
+
+
 def main():
     print(f"เปิดหุ่นที่  http://{config.WEB_HOST}:{config.WEB_PORT}/screen  และ  /face")
     app.run(host=config.WEB_HOST, port=config.WEB_PORT, threaded=True)
