@@ -24,6 +24,17 @@ college_data = load_college_data()
 state = {"value": "idle"}   # idle | listening | thinking | answering | error
 
 
+@app.get("/")
+@app.get("/screen")
+def screen_page():
+    return send_from_directory(STATIC_DIR, "screen.html")
+
+
+@app.get("/face")
+def face_page():
+    return send_from_directory(STATIC_DIR, "face.html")
+
+
 @app.route("/state", methods=["GET", "POST"])
 def state_endpoint():
     if request.method == "POST":

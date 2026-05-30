@@ -46,3 +46,13 @@ def test_ask_error_sets_error_state_and_500(monkeypatch):
     assert r.status_code == 500
     assert "error" in r.get_json()
     assert server.state["value"] == "error"
+
+
+def test_pages_are_served():
+    c = make_client()
+    face = c.get("/face")
+    screen = c.get("/screen")
+    assert face.status_code == 200
+    assert b"eye-ball" in face.data        # มาร์กเกอร์ของจอใบหน้า
+    assert screen.status_code == 200
+    assert b'id="mic"' in screen.data      # มาร์กเกอร์ของจอเนื้อหา
