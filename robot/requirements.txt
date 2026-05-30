@@ -2,6 +2,7 @@
 anthropic>=0.40.0          # ใช้เมื่อ AI_PROVIDER = "claude"
 google-genai>=1.0.0        # ใช้เมื่อ AI_PROVIDER = "gemini" (ฟรี)
 python-dotenv>=1.0.0
+flask>=3.0.0               # เซิร์ฟเวอร์เว็บของกล่องพูดได้
 
 # เฟส 2 (เพิ่มเมื่อพร้อม)
 # google-cloud-speech>=2.0.0
