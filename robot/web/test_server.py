@@ -56,3 +56,10 @@ def test_pages_are_served():
     assert b"eye-ball" in face.data        # มาร์กเกอร์ของจอใบหน้า
     assert screen.status_code == 200
     assert b'id="mic"' in screen.data      # มาร์กเกอร์ของจอเนื้อหา
+
+
+def test_logo_asset_served():
+    c = make_client()
+    r = c.get("/static/logo.jpg")
+    assert r.status_code == 200
+    assert r.data[:3] == b"\xff\xd8\xff"   # magic bytes ของไฟล์ JPEG
