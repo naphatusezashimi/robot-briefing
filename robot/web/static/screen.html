@@ -103,6 +103,16 @@
     background:#eaf2fe;color:var(--blue);font-size:1.2rem;transition:.2s}
   .composer button:hover{background:var(--blue);color:#fff}
 
+  /* ---------- คำถามยอดนิยม (แตะเพื่อถามทันที) ---------- */
+  .quick{margin:0 2px 12px}
+  .quick-label{font-size:.72rem;color:#9fb1c9;margin-bottom:7px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+  .chip{font-family:inherit;font-size:.8rem;color:#2b4565;background:#fff;
+    border:1px solid #dde7f6;border-radius:999px;padding:7px 13px;cursor:pointer;
+    transition:.2s;box-shadow:0 4px 10px -7px rgba(20,60,120,.35)}
+  .chip:hover{background:var(--blue);border-color:var(--blue);color:#fff;transform:translateY(-1px)}
+  .chip:active{transform:none}
+
   /* แผง preview (เฉพาะ mockup) */
   .demo{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:20;
     display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:16px;
@@ -156,6 +166,16 @@
       </button>
       <div class="mic-label" id="micLabel">กดเพื่อพูด</div>
       <div class="or">หรือ</div>
+      <div class="quick" id="quickQs">
+        <div class="quick-label">คำถามยอดนิยม — แตะถามได้เลย</div>
+        <div class="chips">
+          <button type="button" class="chip">เปิดสอนสาขาอะไรบ้าง</button>
+          <button type="button" class="chip">สมัครเรียนต้องมีคุณสมบัติอะไร</button>
+          <button type="button" class="chip">ค่าเทอมเท่าไหร่</button>
+          <button type="button" class="chip">วิทยาลัยอยู่ที่ไหน</button>
+          <button type="button" class="chip">ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง</button>
+        </div>
+      </div>
       <form class="composer" id="composer">
         <input id="q" placeholder="พิมพ์คำถามที่นี่…" autocomplete="off">
         <button type="submit" title="ส่ง">↑</button>

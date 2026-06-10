@@ -68,7 +68,13 @@ async function ask(question, opts = {}) {
     });
     const d = await r.json();
     typing(false);
-    if (!r.ok) throw new Error(d.error || "เซิร์ฟเวอร์ขัดข้อง");
+    if (!r.ok) {
+      // โชว์สาเหตุจริงจากเซิร์ฟเวอร์ (เช่น ยังไม่ได้ตั้งค่า API key) จะได้แก้ถูกจุด
+      addMsg("bot", d.error || "ขออภัยค่ะ ระบบขัดข้อง ลองใหม่อีกครั้งนะคะ", { warn: true });
+      setState("error");
+      setTimeout(() => setState("idle"), 2500);
+      return;
+    }
     const answer = d.answer || "";
     addMsg("bot", answer);
     setState("answering");
@@ -106,6 +112,14 @@ document.getElementById("composer").addEventListener("submit", (e) => {
   const inp = document.getElementById("q");
   const q = inp.value; inp.value = "";
   ask(q, { voice: false });
+});
+
+// ---- คำถามยอดนิยม: แตะแล้วถามทันที ----
+document.querySelectorAll("#quickQs .chip").forEach((b) => {
+  b.addEventListener("click", () => {
+    if (document.body.classList.contains("state-thinking")) return; // กันแตะรัวระหว่างหุ่นกำลังคิด
+    ask(b.textContent.trim(), { voice: false });
+  });
 });
 
 setState("idle");
