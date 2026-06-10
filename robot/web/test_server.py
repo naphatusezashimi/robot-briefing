@@ -63,3 +63,10 @@ def test_logo_asset_served():
     r = c.get("/static/logo.jpg")
     assert r.status_code == 200
     assert r.data[:3] == b"\xff\xd8\xff"   # magic bytes ของไฟล์ JPEG
+
+
+def test_screen_header_uses_real_logo():
+    c = make_client()
+    screen = c.get("/screen")
+    assert screen.status_code == 200
+    assert b"/static/logo.jpg" in screen.data   # header อ้างโลโก้จริง
