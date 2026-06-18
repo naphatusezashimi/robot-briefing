@@ -54,7 +54,8 @@ function speak(text, onEnd) {
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = SPEECH_LANG;
-  const thVoice = window.speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith("th"));
+  const thVoices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith("th"));
+  const thVoice = thVoices.find(v => /หญิง|female|woman|kanya|narisa/i.test(v.name)) || thVoices[0];
   if (thVoice) u.voice = thVoice;
   u.onend = () => onEnd && onEnd();
   u.onerror = () => onEnd && onEnd();
