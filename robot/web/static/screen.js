@@ -30,9 +30,15 @@ function addMsg(role, text, opts = {}) {
   m.className = "msg " + role;
   const tag = opts.voice ? '<span class="mic-tag">🎤 พูด</span>' : "";
   const ava = role === "bot" ? '<div class="ava"><i></i><i></i></div>' : "";
-  m.innerHTML = ava + '<div class="bubble' + (opts.warn ? " warn" : "") + '">' + tag + escapeHtml(text) + "</div>";
+  const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="แผนผังวิทยาลัย">` : "";
+  m.innerHTML = ava + '<div class="bubble' + (opts.warn ? " warn" : "") + '">' + tag + escapeHtml(text) + img + "</div>";
   chat.appendChild(m); chat.scrollTop = chat.scrollHeight;
 }
+// ---- โชว์แผนผังทันที (ไม่เรียก /ask) ----
+function showMap() {
+  addMsg("bot", "นี่คือแผนผังวิทยาลัยค่ะ แตะที่รูปเพื่อขยายดูได้เลย", { image: "/static/map.jpg" });
+}
+
 function typing(on) {
   let t = document.getElementById("typing");
   if (on && !t) {
@@ -48,7 +54,8 @@ function speak(text, onEnd) {
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = SPEECH_LANG;
-  const thVoice = window.speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith("th"));
+  const thVoices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith("th"));
+  const thVoice = thVoices.find(v => /หญิง|female|woman|kanya|narisa/i.test(v.name)) || thVoices[0];
   if (thVoice) u.voice = thVoice;
   u.onend = () => onEnd && onEnd();
   u.onerror = () => onEnd && onEnd();
@@ -76,7 +83,7 @@ async function ask(question, opts = {}) {
       return;
     }
     const answer = d.answer || "";
-    addMsg("bot", answer);
+    addMsg("bot", answer, { image: d.image || null });
     setState("answering");
     speak(answer, () => setState("idle"));
   } catch (e) {
@@ -118,8 +125,21 @@ document.getElementById("composer").addEventListener("submit", (e) => {
 document.querySelectorAll("#quickQs .chip").forEach((b) => {
   b.addEventListener("click", () => {
     if (document.body.classList.contains("state-thinking")) return; // กันแตะรัวระหว่างหุ่นกำลังคิด
+    if (b.dataset.action === "showMap") { showMap(); return; }
     ask(b.textContent.trim(), { voice: false });
   });
 });
 
 setState("idle");
+
+// ---- lightbox ----
+const lightbox = document.getElementById("lightbox");
+if (lightbox) {
+  lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
+  chat.addEventListener("click", (e) => {
+    if (e.target.classList.contains("map-thumb")) {
+      lightbox.querySelector("img").src = e.target.src;
+      lightbox.classList.add("open");
+    }
+  });
+}

@@ -116,3 +116,72 @@ def test_screen_has_quick_questions():
     assert 'id="quickQs"' in html
     assert "คำถามยอดนิยม" in html
     assert html.count('class="chip"') >= 3      # มีปุ่มคำถามอย่างน้อย 3 ปุ่ม
+
+
+# ---------- wayfinding ----------
+
+import wayfinding
+
+
+def test_wants_map_true_for_location_keywords():
+    assert wayfinding.wants_map("สาขาอิเล็กทรอนิกส์อยู่ตึกไหน") is True
+    assert wayfinding.wants_map("งานพัสดุอยู่อาคารไหน") is True
+    assert wayfinding.wants_map("ห้องสมุดอยู่ที่ไหน") is True
+    assert wayfinding.wants_map("ไปยังหอประชุมได้ยังไง") is True
+    assert wayfinding.wants_map("แผนผังวิทยาลัยมีไหม") is True
+    assert wayfinding.wants_map("โรงอาหารอยู่ตรงไหน") is True
+    assert wayfinding.wants_map("ที่จอดรถอยู่ที่ไหน") is True
+
+
+def test_wants_map_false_for_non_location():
+    assert wayfinding.wants_map("ค่าเทอมเท่าไหร่") is False
+    assert wayfinding.wants_map("เปิดสอนสาขาอะไรบ้าง") is False
+    assert wayfinding.wants_map("สมัครเรียนต้องมีคุณสมบัติอะไร") is False
+    assert wayfinding.wants_map("ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง") is False
+    assert wayfinding.wants_map("") is False
+
+
+# ---------- map asset ----------
+
+def test_map_asset_served():
+    c = make_client()
+    r = c.get("/static/map.jpg")
+    assert r.status_code == 200
+    assert r.data[:3] == b"\xff\xd8\xff"  # JPEG magic bytes
+
+
+# ---------- /ask + image ----------
+
+def test_ask_location_question_includes_image(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai", lambda q, d: "อาคาร 7 ครับ")
+    monkeypatch.setattr(server, "wants_map", lambda q: True)
+    r = c.post("/ask", json={"question": "สาขาอิเล็กทรอนิกส์อยู่ตึกไหน"})
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d["answer"] == "อาคาร 7 ครับ"
+    assert d.get("image") == "/static/map.jpg"
+
+
+def test_ask_non_location_question_no_image(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai", lambda q, d: "ตอบ: ค่าเทอม")
+    monkeypatch.setattr(server, "wants_map", lambda q: False)
+    r = c.post("/ask", json={"question": "ค่าเทอมเท่าไหร่"})
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d["answer"] == "ตอบ: ค่าเทอม"
+    assert "image" not in d
+
+
+# ---------- map chip ----------
+
+def test_screen_has_map_chip():
+    c = make_client()
+    screen = c.get("/screen")
+    assert screen.status_code == 200
+    html = screen.data.decode("utf-8")
+    assert "แผนผังวิทยาลัย" in html
+    assert 'data-action="showMap"' in html

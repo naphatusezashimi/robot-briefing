@@ -22,6 +22,7 @@ from flask import Flask, request, jsonify, send_from_directory  # noqa: E402
 import config                                                   # noqa: E402
 from database import load_college_data                          # noqa: E402
 from ai import ask_ai                                           # noqa: E402
+from wayfinding import wants_map                               # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
@@ -80,7 +81,10 @@ def ask():
     try:
         answer = ask_ai(question, college_data)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
         state["value"] = "answering"
-        return jsonify(answer=answer)
+        result = {"answer": answer}
+        if wants_map(question):
+            result["image"] = "/static/map.jpg"
+        return jsonify(**result)
     except Exception as e:
         state["value"] = "error"
         return jsonify(error=str(e)), 500
