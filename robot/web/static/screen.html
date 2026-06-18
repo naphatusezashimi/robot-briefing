@@ -51,14 +51,15 @@
   .logo{width:48px;height:48px;border-radius:14px;flex:none; display:grid;place-items:center;
     background:#fff; border:1px solid #e7eefb;
     box-shadow:0 8px 18px -6px rgba(20,60,120,.18)}
-  .brand h1{font-family:"Mitr";font-weight:500;font-size:1.04rem;line-height:1.15;color:#13243b}
-  .brand p{font-size:.74rem;color:var(--muted);margin-top:2px}
-  .led{margin-left:auto; display:flex;align-items:center;gap:7px; padding:6px 12px;
+  .brand{flex:1;min-width:0}
+  .brand h1{font-family:"Mitr";font-weight:500;font-size:.9rem;line-height:1.2;color:#13243b;text-wrap:balance}
+  .brand p{font-size:.72rem;color:var(--muted);margin-top:2px}
+  .led{margin-left:auto; display:flex;align-items:center;gap:6px; padding:5px 9px;
     background:#f1f6fe;border-radius:999px;border:1px solid #e2ecfb;white-space:nowrap}
-  .led .d{width:10px;height:10px;border-radius:50%;background:var(--led);transition:background .4s;
+  .led .d{width:9px;height:9px;border-radius:50%;background:var(--led);transition:background .4s;
     box-shadow:0 0 0 3px color-mix(in srgb,var(--led) 25%,transparent)}
   .led .d.live{animation:lpulse 1.4s infinite}
-  .led span{font-size:.76rem;color:#46618a;font-weight:500}
+  .led span{font-size:.68rem;color:#46618a;font-weight:500}
 
   /* ---------- chat ---------- */
   .chat{flex:1; overflow-y:auto; padding:20px 18px 8px; display:flex;flex-direction:column;gap:14px}
@@ -112,6 +113,15 @@
     transition:.2s;box-shadow:0 4px 10px -7px rgba(20,60,120,.35)}
   .chip:hover{background:var(--blue);border-color:var(--blue);color:#fff;transform:translateY(-1px)}
   .chip:active{transform:none}
+
+  /* ---------- map thumbnail & lightbox ---------- */
+  .map-thumb{display:block;width:100%;max-width:320px;border-radius:10px;margin-top:8px;
+    cursor:zoom-in;border:1px solid #e0eaf6;box-shadow:0 4px 14px -6px rgba(20,60,120,.3)}
+  #lightbox{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);
+    align-items:center;justify-content:center;cursor:zoom-out}
+  #lightbox.open{display:flex}
+  #lightbox img{max-width:95vw;max-height:90vh;border-radius:8px;object-fit:contain;
+    box-shadow:0 20px 60px -10px rgba(0,0,0,.7)}
 
   /* แผง preview (เฉพาะ mockup) */
   .demo{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:20;
@@ -169,6 +179,7 @@
       <div class="quick" id="quickQs">
         <div class="quick-label">คำถามยอดนิยม — แตะถามได้เลย</div>
         <div class="chips">
+          <button type="button" class="chip" data-action="showMap">🗺️ แผนผังวิทยาลัย</button>
           <button type="button" class="chip">เปิดสอนสาขาอะไรบ้าง</button>
           <button type="button" class="chip">สมัครเรียนต้องมีคุณสมบัติอะไร</button>
           <button type="button" class="chip">ค่าเทอมเท่าไหร่</button>
@@ -183,6 +194,7 @@
     </div>
   </div>
 
+<div id="lightbox"><img src="" alt="แผนผังวิทยาลัยขยาย"></div>
 <script src="/static/screen.js"></script>
 </body>
 </html>
