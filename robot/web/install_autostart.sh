@@ -13,7 +13,14 @@ echo "[2/3] ติดตั้ง Chromium kiosk autostart..."
 mkdir -p ~/.config/autostart
 cp "$SCRIPT_DIR/robot-kiosk.desktop" ~/.config/autostart/
 
+echo ""
+echo "⚠  สำคัญ: แก้ SIMULATOR_MODE ใน robot/config.py ก่อนใช้งานบน Pi"
+echo "   เปิดไฟล์: nano /home/pi/robot-briefing/robot/config.py"
+echo "   เปลี่ยน: SIMULATOR_MODE = True"
+echo "   เป็น:    SIMULATOR_MODE = False"
+echo ""
+
 echo "[3/3] ติดตั้ง RPi.GPIO (ถ้ายังไม่มี)..."
-pip install RPi.GPIO --quiet
+sudo apt-get install -y python3-rpi.gpio 2>/dev/null || pip install RPi.GPIO --quiet --break-system-packages
 
 echo "Done. รัน 'sudo reboot' เพื่อทดสอบ autostart เต็มรูปแบบ"
