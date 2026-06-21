@@ -185,3 +185,16 @@ def test_screen_has_map_chip():
     html = screen.data.decode("utf-8")
     assert "แผนผังวิทยาลัย" in html
     assert 'data-action="showMap"' in html
+
+
+# ---------- gpio_btn ----------
+
+import queue as _queue
+import gpio_btn
+
+
+def test_gpio_btn_init_simulator_mode():
+    """SIMULATOR_MODE=True: init ต้องไม่ crash และ queue ต้องว่าง"""
+    q = _queue.Queue()
+    btn = gpio_btn.GpioButton(q)
+    assert q.empty()
