@@ -18,17 +18,41 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-from flask import Flask, request, jsonify, send_from_directory  # noqa: E402
+from flask import Flask, request, jsonify, send_from_directory, Response  # noqa: E402
 import config                                                   # noqa: E402
 from database import load_college_data                          # noqa: E402
 from ai import ask_ai                                           # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
+import queue                                                   # noqa: E402
+from gpio_btn import GpioButton                                # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
 state = {"value": "idle"}   # idle | listening | thinking | answering | error
+
+button_queue: queue.Queue = queue.Queue()
+_gpio = GpioButton(button_queue)
+
+
+def _make_sse_stream():
+    yield "data: connected\n\n"
+    while True:
+        try:
+            evt = button_queue.get(timeout=15)
+            yield f"data: {evt}\n\n"
+        except queue.Empty:
+            yield ": heartbeat\n\n"
+
+
+@app.get("/events")
+def events():
+    return Response(
+        _make_sse_stream(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def missing_key_error():
