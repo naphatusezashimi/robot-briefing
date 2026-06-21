@@ -1,0 +1,14 @@
+[Unit]
+Description=Robot Briefing Web Server
+After=network.target
+
+[Service]
+WorkingDirectory=/home/pi/robot-briefing/robot/web
+ExecStart=/usr/bin/python3 server.py
+Restart=always
+RestartSec=3
+User=pi
+EnvironmentFile=/home/pi/robot-briefing/.env
+
+[Install]
+WantedBy=multi-user.target

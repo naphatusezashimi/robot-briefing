@@ -34,3 +34,6 @@ COLLEGE_DATA_PATH = "college_data.json"
 WEB_HOST = "127.0.0.1"     # เปิดเฉพาะเครื่องตัวเอง
 WEB_PORT = 5000
 SPEECH_LANG = "th-TH"      # ภาษาเสียงฟัง/พูดในเบราว์เซอร์
+
+# --- ตั้งค่า GPIO (เฟส 2) ---
+GPIO_BUTTON_PIN = 18  # BCM pin สำหรับปุ่มกายภาพ (เปลี่ยนได้)

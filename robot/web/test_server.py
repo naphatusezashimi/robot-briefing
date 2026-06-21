@@ -185,3 +185,31 @@ def test_screen_has_map_chip():
     html = screen.data.decode("utf-8")
     assert "แผนผังวิทยาลัย" in html
     assert 'data-action="showMap"' in html
+
+
+# ---------- gpio_btn ----------
+
+import queue as _queue
+import gpio_btn
+
+
+def test_gpio_btn_init_simulator_mode():
+    """SIMULATOR_MODE=True: init ต้องไม่ crash และ queue ต้องว่าง"""
+    q = _queue.Queue()
+    btn = gpio_btn.GpioButton(q)
+    assert q.empty()
+
+
+# ---------- SSE /events ----------
+
+
+def test_events_endpoint_returns_stream(monkeypatch):
+    """/events ต้องคืน text/event-stream และเริ่มด้วย 'data: connected'"""
+    def finite_stream():
+        yield "data: connected\n\n"
+    monkeypatch.setattr(server, "_make_sse_stream", finite_stream)
+    c = make_client()
+    r = c.get("/events")
+    assert r.status_code == 200
+    assert "text/event-stream" in r.content_type
+    assert b"data: connected" in r.data

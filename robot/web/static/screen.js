@@ -143,3 +143,16 @@ if (lightbox) {
     }
   });
 }
+
+// ---- GPIO button via SSE ----
+const evtSrc = new EventSource("/events");
+evtSrc.onmessage = (e) => {
+  if (
+    e.data === "mic-start" &&
+    !listening &&
+    !document.body.classList.contains("state-thinking") &&
+    !document.body.classList.contains("state-answering")
+  ) {
+    mic.click();
+  }
+};
