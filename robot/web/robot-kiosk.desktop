@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=Robot Kiosk
+Exec=bash -c "sleep 5 && chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble http://localhost:5000/screen"
