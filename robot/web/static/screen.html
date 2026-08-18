@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
   MOCKUP (ดีไซน์อย่างเดียว ยังไม่ต่อเสียง/AI จริง) — จอ "เนื้อหา" ของหุ่นกล่องพูดได้
-  วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์
-  คำตอบในนี้เป็นตัวอย่างที่เขียนไว้ก่อน (ของจริงจะมาจาก ai.py + college_data.json)
+  อำเภอเสาไห้ จังหวัดสระบุรี
+  คำตอบในนี้เป็นตัวอย่างที่เขียนไว้ก่อน (ของจริงจะมาจาก ai.py + district_data.json)
   เปิดคู่กับ face.html ในเบราว์เซอร์เดียว สถานะจะ sync กัน
 -->
 <html lang="th">
@@ -154,11 +154,11 @@
 
     <header>
       <div class="logo">
-        <img src="/static/logo.jpg" alt="ตราวิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์" width="40" height="40" style="object-fit:contain">
+        <img src="/static/logo.jpg" alt="ตราอำเภอเสาไห้ จังหวัดสระบุรี" width="40" height="40" style="object-fit:contain">
       </div>
       <div class="brand">
-        <h1>วิทยาลัยเทคนิคท่าหลวงฯ</h1>
-        <p>ผู้ช่วยอัจฉริยะ • ถามข้อมูลวิทยาลัยได้เลย</p>
+        <h1>อำเภอเสาไห้</h1>
+        <p>ผู้ช่วยอัจฉริยะ • ถามข้อมูลอำเภอได้เลย</p>
       </div>
       <div class="led"><span class="d"></span><span class="led-text">พร้อมรับคำถาม</span></div>
     </header>
@@ -166,7 +166,7 @@
     <main class="chat" id="chat">
       <div class="msg bot" style="animation-delay:.1s">
         <div class="ava"><i></i><i></i></div>
-        <div class="bubble">สวัสดีค่ะ 😊 ฉันคือผู้ช่วยแนะนำข้อมูล<b>วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</b> อยากทราบเรื่องอะไร พูดหรือพิมพ์ถามได้เลยนะคะ</div>
+        <div class="bubble">สวัสดีค่ะ 😊 ฉันคือผู้ช่วยแนะนำข้อมูล<b>อำเภอเสาไห้ จังหวัดสระบุรี</b> อยากทราบเรื่องอะไร พูดหรือพิมพ์ถามได้เลยนะคะ</div>
       </div>
     </main>
 
@@ -179,10 +179,10 @@
       <div class="quick" id="quickQs">
         <div class="quick-label">คำถามยอดนิยม — แตะถามได้เลย</div>
         <div class="chips">
-          <button type="button" class="chip" data-action="showMap">🗺️ แผนผังวิทยาลัย</button>
-          <button type="button" class="chip">เปิดสอนสาขาอะไรบ้าง</button>
-          <button type="button" class="chip">สมัครเรียนต้องมีคุณสมบัติอะไร</button>
-          <button type="button" class="chip">ค่าเทอมเท่าไหร่</button>
+          <button type="button" class="chip" data-action="showMap">🗺️ แผนที่อำเภอ</button>
+          <button type="button" class="chip">มีกี่ตำบล</button>
+          <button type="button" class="chip">ของดีประจำอำเภอมีอะไรบ้าง</button>
+          <button type="button" class="chip">ที่ว่าการอำเภออยู่ที่ไหน</button>
         </div>
       </div>
       <form class="composer" id="composer">
@@ -192,7 +192,7 @@
     </div>
   </div>
 
-<div id="lightbox"><img src="" alt="แผนผังวิทยาลัยขยาย"></div>
+<div id="lightbox"><img src="" alt="แผนที่อำเภอขยาย"></div>
 <script src="/static/screen.js"></script>
 </body>
 </html>

@@ -28,7 +28,7 @@ AUDIO_IN = "question.wav"
 AUDIO_OUT = "answer.wav"
 
 # --- ไฟล์ฐานข้อมูล ---
-COLLEGE_DATA_PATH = "college_data.json"
+DISTRICT_DATA_PATH = "district_data.json"
 
 # --- ตั้งค่าเว็บ (เฟสกล่องพูดได้) ---
 WEB_HOST = "127.0.0.1"     # เปิดเฉพาะเครื่องตัวเอง

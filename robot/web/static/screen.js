@@ -30,13 +30,13 @@ function addMsg(role, text, opts = {}) {
   m.className = "msg " + role;
   const tag = opts.voice ? '<span class="mic-tag">🎤 พูด</span>' : "";
   const ava = role === "bot" ? '<div class="ava"><i></i><i></i></div>' : "";
-  const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="แผนผังวิทยาลัย">` : "";
+  const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="แผนที่อำเภอ">` : "";
   m.innerHTML = ava + '<div class="bubble' + (opts.warn ? " warn" : "") + '">' + tag + escapeHtml(text) + img + "</div>";
   chat.appendChild(m); chat.scrollTop = chat.scrollHeight;
 }
 // ---- โชว์แผนผังทันที (ไม่เรียก /ask) ----
 function showMap() {
-  addMsg("bot", "นี่คือแผนผังวิทยาลัยค่ะ แตะที่รูปเพื่อขยายดูได้เลย", { image: "/static/map.jpg" });
+  addMsg("bot", "นี่คือแผนที่อำเภอค่ะ แตะที่รูปเพื่อขยายดูได้เลย", { image: "/static/map.jpg" });
 }
 
 function typing(on) {

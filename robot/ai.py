@@ -2,7 +2,7 @@
 โมดูลถาม AI — รองรับ 2 เจ้า เลือกที่ config.AI_PROVIDER
   - "gemini" : Google Gemini (มีโควตาฟรี)
   - "claude" : Anthropic Claude (ต้องเติมเครดิต)
-ทั้งสองเจ้าใช้ system prompt กันตอบมั่วตัวเดียวกัน + แนบข้อมูลวิทยาลัยทุกครั้ง
+ทั้งสองเจ้าใช้ system prompt กันตอบมั่วตัวเดียวกัน + แนบข้อมูลอำเภอทุกครั้ง
 """
 
 from config import (
@@ -17,12 +17,12 @@ from database import format_for_prompt
 
 # --- กฎกันตอบมั่ว (ใช้ร่วมกันทุกเจ้า) ---
 _SYSTEM_RULES = (
-    "คุณเป็นหุ่นยนต์ผู้ช่วยแนะนำข้อมูลของวิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์ "
+    "คุณเป็นหุ่นยนต์ผู้ช่วยแนะนำข้อมูลของอำเภอเสาไห้ จังหวัดสระบุรี "
     "ตอบเป็นภาษาไทย สุภาพ สั้น กระชับ เข้าใจง่าย "
-    "ตอบโดยอ้างอิงจากข้อมูลวิทยาลัยที่ให้ไว้ด้านล่างเท่านั้น "
+    "ตอบโดยอ้างอิงจากข้อมูลอำเภอที่ให้ไว้ด้านล่างเท่านั้น "
     "ห้ามแต่งหรือคาดเดาข้อมูลที่ไม่มีในฐานข้อมูลเด็ดขาด "
     "ถ้าไม่มีข้อมูลในส่วนที่ถาม ให้ตอบว่า 'ขออภัย ยังไม่มีข้อมูลในส่วนนี้' "
-    "และแนะนำให้ติดต่อเจ้าหน้าที่วิทยาลัยโดยตรง (โทร 0-3628-1295)"
+    "และแนะนำให้ติดต่อที่ว่าการอำเภอเสาไห้โดยตรง (โทร 0-3639-1182)"
 )
 
 _NO_QUESTION = "ขออภัยค่ะ ไม่ได้ยินคำถาม กรุณาถามใหม่อีกครั้งนะคะ"
@@ -32,11 +32,11 @@ _claude_client = None
 _gemini_client = None
 
 
-def _system_text(college_data: dict) -> str:
-    return _SYSTEM_RULES + "\n\nข้อมูลวิทยาลัย:\n" + format_for_prompt(college_data)
+def _system_text(district_data: dict) -> str:
+    return _SYSTEM_RULES + "\n\nข้อมูลอำเภอ:\n" + format_for_prompt(district_data)
 
 
-def _ask_gemini(question: str, college_data: dict) -> str:
+def _ask_gemini(question: str, district_data: dict) -> str:
     global _gemini_client
     if _gemini_client is None:
         from google import genai
@@ -48,7 +48,7 @@ def _ask_gemini(question: str, college_data: dict) -> str:
         model=GEMINI_MODEL,
         contents=question,
         config=types.GenerateContentConfig(
-            system_instruction=_system_text(college_data),
+            system_instruction=_system_text(district_data),
             max_output_tokens=AI_MAX_TOKENS,
             temperature=0.2,
             # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
@@ -58,7 +58,7 @@ def _ask_gemini(question: str, college_data: dict) -> str:
     return (response.text or "").strip()
 
 
-def _ask_claude(question: str, college_data: dict) -> str:
+def _ask_claude(question: str, district_data: dict) -> str:
     global _claude_client
     if _claude_client is None:
         import anthropic
@@ -70,9 +70,9 @@ def _ask_claude(question: str, college_data: dict) -> str:
         system=[
             {"type": "text", "text": _SYSTEM_RULES},
             {
-                # college_data ถูก cache ที่ server — ประหยัด token ในการทดสอบซ้ำ
+                # district_data ถูก cache ที่ server — ประหยัด token ในการทดสอบซ้ำ
                 "type": "text",
-                "text": "ข้อมูลวิทยาลัย:\n" + format_for_prompt(college_data),
+                "text": "ข้อมูลอำเภอ:\n" + format_for_prompt(district_data),
                 "cache_control": {"type": "ephemeral"},
             },
         ],
@@ -81,13 +81,13 @@ def _ask_claude(question: str, college_data: dict) -> str:
     return response.content[0].text
 
 
-def ask_ai(question: str, college_data: dict) -> str:
+def ask_ai(question: str, district_data: dict) -> str:
     if not question.strip():
         return _NO_QUESTION
 
     if AI_PROVIDER == "gemini":
-        return _ask_gemini(question, college_data)
+        return _ask_gemini(question, district_data)
     elif AI_PROVIDER == "claude":
-        return _ask_claude(question, college_data)
+        return _ask_claude(question, district_data)
     else:
         raise ValueError(f"AI_PROVIDER ไม่รู้จัก: '{AI_PROVIDER}' (ใช้ได้: 'gemini' หรือ 'claude')")

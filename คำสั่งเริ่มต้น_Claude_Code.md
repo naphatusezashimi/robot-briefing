@@ -30,7 +30,7 @@
 ก๊อปข้อความนี้วางเป็นคำสั่งแรก:
 
 ```
-อ่านไฟล์ BRIEF.md, college_data.example.json และ robot_main_reference.py
+อ่านไฟล์ BRIEF.md, district_data.example.json และ robot_main_reference.py
 ในโฟลเดอร์นี้ทั้งหมดก่อน แล้วสรุปให้ฟังว่าเข้าใจโปรเจกต์ว่าอย่างไร
 และจะเริ่มเฟส 1 อย่างไร ยังไม่ต้องเขียนโค้ด รอให้ฉันยืนยันก่อน
 ```
@@ -45,7 +45,7 @@
 เริ่มเฟส 1 ตาม BRIEF.md ได้เลย สร้างโครงไฟล์ทั้งหมด ทำ database.py,
 ai.py (อย่าลืม prompt กันตอบมั่ว), และ simulator.py ที่ให้ฉันพิมพ์
 คำถามแล้วได้คำตอบจาก AI บนคอมโดยไม่ต้องมีอุปกรณ์จริง
-ใช้ college_data.example.json เป็นฐานข้อมูลตั้งต้น
+ใช้ district_data.example.json เป็นฐานข้อมูลตั้งต้น
 ทำ requirements.txt และ README วิธีรันด้วย
 ```
 

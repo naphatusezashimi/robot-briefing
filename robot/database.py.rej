@@ -1,0 +1,14 @@
+diff a/robot/database.py b/robot/database.py	(rejected hunks)
+@@ -1,9 +1,9 @@
+ import json
+-from config import COLLEGE_DATA_PATH
++from config import DISTRICT_DATA_PATH
+ 
+ 
+-def load_college_data() -> dict:
+-    with open(COLLEGE_DATA_PATH, "r", encoding="utf-8") as f:
++def load_district_data() -> dict:
++    with open(DISTRICT_DATA_PATH, "r", encoding="utf-8") as f:
+         return json.load(f)
+ 
+ 

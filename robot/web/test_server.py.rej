@@ -1,0 +1,71 @@
+diff a/robot/web/test_server.py b/robot/web/test_server.py	(rejected hunks)
+@@ -124,20 +124,18 @@ import wayfinding
+ 
+ 
+ def test_wants_map_true_for_location_keywords():
+-    assert wayfinding.wants_map("สาขาอิเล็กทรอนิกส์อยู่ตึกไหน") is True
+-    assert wayfinding.wants_map("งานพัสดุอยู่อาคารไหน") is True
+-    assert wayfinding.wants_map("ห้องสมุดอยู่ที่ไหน") is True
+-    assert wayfinding.wants_map("ไปยังหอประชุมได้ยังไง") is True
+-    assert wayfinding.wants_map("แผนผังวิทยาลัยมีไหม") is True
+-    assert wayfinding.wants_map("โรงอาหารอยู่ตรงไหน") is True
+-    assert wayfinding.wants_map("ที่จอดรถอยู่ที่ไหน") is True
++    assert wayfinding.wants_map("วัดสูงอยู่ที่ไหน") is True
++    assert wayfinding.wants_map("ที่ว่าการอำเภอเสาไห้อยู่ตรงไหน") is True
++    assert wayfinding.wants_map("ตำบลเสาไห้อยู่ที่ไหน") is True
++    assert wayfinding.wants_map("ไปวัดสูงยังไง") is True
++    assert wayfinding.wants_map("ขอแผนที่อำเภอหน่อย") is True
++    assert wayfinding.wants_map("มีกี่หมู่บ้าน") is True
+ 
+ 
+ def test_wants_map_false_for_non_location():
+-    assert wayfinding.wants_map("ค่าเทอมเท่าไหร่") is False
+-    assert wayfinding.wants_map("เปิดสอนสาขาอะไรบ้าง") is False
+-    assert wayfinding.wants_map("สมัครเรียนต้องมีคุณสมบัติอะไร") is False
+-    assert wayfinding.wants_map("ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง") is False
++    assert wayfinding.wants_map("ของดีประจำอำเภอมีอะไรบ้าง") is False
++    assert wayfinding.wants_map("อำเภอเสาไห้ตั้งขึ้นเมื่อไหร่") is False
++    assert wayfinding.wants_map("ติดต่ออำเภอได้ช่องทางไหนบ้าง") is False
+     assert wayfinding.wants_map("") is False
+ 
+ 
+@@ -155,24 +153,24 @@ def test_map_asset_served():
+ def test_ask_location_question_includes_image(monkeypatch):
+     c = make_client()
+     set_valid_key(monkeypatch)
+-    monkeypatch.setattr(server, "ask_ai", lambda q, d: "อาคาร 7 ครับ")
++    monkeypatch.setattr(server, "ask_ai", lambda q, d: "วัดสูง ตำบลเสาไห้ครับ")
+     monkeypatch.setattr(server, "wants_map", lambda q: True)
+-    r = c.post("/ask", json={"question": "สาขาอิเล็กทรอนิกส์อยู่ตึกไหน"})
++    r = c.post("/ask", json={"question": "วัดสูงอยู่ที่ไหน"})
+     assert r.status_code == 200
+     d = r.get_json()
+-    assert d["answer"] == "อาคาร 7 ครับ"
++    assert d["answer"] == "วัดสูง ตำบลเสาไห้ครับ"
+     assert d.get("image") == "/static/map.jpg"
+ 
+ 
+ def test_ask_non_location_question_no_image(monkeypatch):
+     c = make_client()
+     set_valid_key(monkeypatch)
+-    monkeypatch.setattr(server, "ask_ai", lambda q, d: "ตอบ: ค่าเทอม")
++    monkeypatch.setattr(server, "ask_ai", lambda q, d: "ตอบ: ของดีประจำอำเภอ")
+     monkeypatch.setattr(server, "wants_map", lambda q: False)
+-    r = c.post("/ask", json={"question": "ค่าเทอมเท่าไหร่"})
++    r = c.post("/ask", json={"question": "ของดีประจำอำเภอมีอะไรบ้าง"})
+     assert r.status_code == 200
+     d = r.get_json()
+-    assert d["answer"] == "ตอบ: ค่าเทอม"
++    assert d["answer"] == "ตอบ: ของดีประจำอำเภอ"
+     assert "image" not in d
+ 
+ 
+@@ -183,7 +181,7 @@ def test_screen_has_map_chip():
+     screen = c.get("/screen")
+     assert screen.status_code == 200
+     html = screen.data.decode("utf-8")
+-    assert "แผนผังวิทยาลัย" in html
++    assert "แผนที่อำเภอ" in html
+     assert 'data-action="showMap"' in html
+ 
+ 

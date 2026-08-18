@@ -1,0 +1,10 @@
+diff a/robot/web/static/face.html b/robot/web/static/face.html	(rejected hunks)
+@@ -1,7 +1,7 @@
+ <!DOCTYPE html>
+ <!--
+   MOCKUP (ดีไซน์อย่างเดียว ยังไม่ต่อเสียง/AI) — จอ "ใบหน้า" ของหุ่นกล่องพูดได้
+-  วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์
++  อำเภอเสาไห้ จังหวัดสระบุรี
+   เปิดไฟล์นี้คู่กับ screen.html ในเบราว์เซอร์เดียว สถานะจะ sync กัน
+ -->
+ <html lang="th">
