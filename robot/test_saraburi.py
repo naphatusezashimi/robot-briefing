@@ -38,3 +38,23 @@ def test_format_all_data_empty_saraburi_omits_saraburi_section():
     result = format_all_data(college, {})
     assert "ข้อมูลวิทยาลัย" in result
     assert "ข้อมูลจังหวัดสระบุรี" not in result
+from unittest.mock import patch
+
+
+def test_ask_ai_passes_saraburi_data_to_system_prompt(monkeypatch):
+    """ตรวจว่า ask_ai ส่งข้อมูลทั้งสองเข้า system prompt"""
+    import ai
+    college = {"ชื่อสถานศึกษา": "ทดสอบ"}
+    saraburi = {"ท่องเที่ยวสระบุรี": {}}
+    captured = {}
+
+    def fake_ask_gemini(question, c_data, s_data):
+        captured["college"] = c_data
+        captured["saraburi"] = s_data
+        return "ตอบ"
+
+    monkeypatch.setattr(ai, "_ask_gemini", fake_ask_gemini)
+    monkeypatch.setattr(ai, "AI_PROVIDER", "gemini")
+    ai.ask_ai("ถามอะไร", college, saraburi)
+    assert captured["college"] == college
+    assert captured["saraburi"] == saraburi
