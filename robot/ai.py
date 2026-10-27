@@ -59,7 +59,8 @@ def _system_text(college_data: dict, saraburi_data: dict, lang: str = "th") -> s
     return _rules(lang) + "\n\n" + format_all_data(college_data, saraburi_data)
 
 
-def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
+def _gemini(college_data: dict, saraburi_data: dict, lang: str):
+    """คืน (client, config) ที่ใช้ร่วมกันทั้งแบบตอบทีเดียวและแบบทยอยตอบ"""
     global _gemini_client
     if _gemini_client is None:
         from google import genai
@@ -67,27 +68,37 @@ def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: st
 
     from google.genai import types
 
-    response = _gemini_client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=question,
-        config=types.GenerateContentConfig(
-            system_instruction=_system_text(college_data, saraburi_data, lang),
-            max_output_tokens=AI_MAX_TOKENS,
-            temperature=0.2,
-            # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        ),
+    config = types.GenerateContentConfig(
+        system_instruction=_system_text(college_data, saraburi_data, lang),
+        max_output_tokens=AI_MAX_TOKENS,
+        temperature=0.2,
+        # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
+    return _gemini_client, config
+
+
+def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
+    client, config = _gemini(college_data, saraburi_data, lang)
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=question, config=config)
     return (response.text or "").strip()
 
 
-def _ask_claude(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
+def _stream_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
+    client, config = _gemini(college_data, saraburi_data, lang)
+    for chunk in client.models.generate_content_stream(model=GEMINI_MODEL, contents=question, config=config):
+        if chunk.text:
+            yield chunk.text
+
+
+def _claude_args(question: str, college_data: dict, saraburi_data: dict, lang: str):
+    """คืน (client, args) ที่ใช้ร่วมกันทั้งแบบตอบทีเดียวและแบบทยอยตอบ"""
     global _claude_client
     if _claude_client is None:
         import anthropic
         _claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    response = _claude_client.messages.create(
+    return _claude_client, dict(
         model=CLAUDE_MODEL,
         max_tokens=AI_MAX_TOKENS,
         system=[
@@ -101,7 +112,18 @@ def _ask_claude(question: str, college_data: dict, saraburi_data: dict, lang: st
         ],
         messages=[{"role": "user", "content": question}],
     )
+
+
+def _ask_claude(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
+    client, args = _claude_args(question, college_data, saraburi_data, lang)
+    response = client.messages.create(**args)
     return response.content[0].text
+
+
+def _stream_claude(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
+    client, args = _claude_args(question, college_data, saraburi_data, lang)
+    with client.messages.stream(**args) as stream:
+        yield from stream.text_stream
 
 
 def ask_ai(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
@@ -112,5 +134,19 @@ def ask_ai(question: str, college_data: dict, saraburi_data: dict, lang: str = "
         return _ask_gemini(question, college_data, saraburi_data, lang)
     elif AI_PROVIDER == "claude":
         return _ask_claude(question, college_data, saraburi_data, lang)
+    else:
+        raise ValueError(f"AI_PROVIDER ไม่รู้จัก: '{AI_PROVIDER}' (ใช้ได้: 'gemini' หรือ 'claude')")
+
+
+def ask_ai_stream(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
+    """เหมือน ask_ai แต่ทยอยคืนข้อความทีละท่อนตามที่ AI ส่งมา (ให้จอโชว์คำตอบค่อย ๆ ขึ้น)"""
+    if not question.strip():
+        yield _NO_QUESTION
+        return
+
+    if AI_PROVIDER == "gemini":
+        yield from _stream_gemini(question, college_data, saraburi_data, lang)
+    elif AI_PROVIDER == "claude":
+        yield from _stream_claude(question, college_data, saraburi_data, lang)
     else:
         raise ValueError(f"AI_PROVIDER ไม่รู้จัก: '{AI_PROVIDER}' (ใช้ได้: 'gemini' หรือ 'claude')")

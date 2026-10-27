@@ -53,6 +53,7 @@ const store = {
 };
 
 let lang = T[store.get("lang")] ? store.get("lang") : "th";
+let convo = 0;   // เพิ่มทุกครั้งที่กด "คุยใหม่" — คำตอบของบทสนทนาเก่าที่ยังไหลอยู่จะหยุดเอง
 let state = "idle";
 const t = () => T[lang];
 
@@ -139,6 +140,8 @@ const AVA = '<div class="ava"><div class="face"><i></i><i></i></div></div>';
 const REPLAY_ICON = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>';
 
 function scrollDown() { requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; }); }
+// ตอนคำตอบกำลังไหล เลื่อนตามเฉพาะถ้าผู้ใช้ยังอยู่ท้ายแชท (ถ้าเลื่อนขึ้นไปอ่านอยู่ ไม่ดึงกลับ)
+function nearBottom() { return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80; }
 
 function addMsg(role, text, opts = {}) {
   setView("thread");
@@ -147,17 +150,58 @@ function addMsg(role, text, opts = {}) {
   if (role === "user") {
     m.innerHTML = (opts.voice ? '<span class="mic-tag">' + t().spoken + "</span>" : "") + escapeHtml(text);
   } else {
-    const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="${t().mapAlt}">` : "";
-    const tools = opts.warn ? "" :
-      `<div class="tools"><button type="button" class="replay" title="${t().replay}">${REPLAY_ICON}</button></div>`;
-    m.innerHTML = AVA + '<div class="a-body' + (opts.warn ? " warn" : "") + '">' + formatAnswer(text) + img + tools + "</div>";
-    const r = m.querySelector(".replay");
-    if (r) {
-      const say = plainForSpeech(text), sayLang = lang;
-      r.addEventListener("click", () => { if (busy()) return; setState("answering"); speak(say, sayLang, () => setState("idle")); });
-    }
+    m.innerHTML = AVA + '<div class="a-body"></div>';
+    renderBot(m, text, { ...opts, done: true });
   }
   chat.appendChild(m); scrollDown();
+  return m;
+}
+// วาดเนื้อหาคำตอบ — ระหว่างไหลมีจุดกะพริบท้ายข้อความ, จบแล้วค่อยใส่รูป + ปุ่มฟังซ้ำ
+function renderBot(m, text, opts = {}) {
+  const box = m.querySelector(".a-body");
+  box.classList.toggle("warn", !!opts.warn);
+  let html = formatAnswer(text);
+  if (!opts.done) {
+    const caret = '<span class="caret"></span>';
+    html = /<\/(p|li|div)>(<\/ul>)?$/.test(html) ? html.replace(/(<\/(?:p|li|div)>)(<\/ul>)?$/, caret + "$1$2") : html + caret;
+    box.innerHTML = html;
+    return;
+  }
+  const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="${t().mapAlt}">` : "";
+  const tools = opts.warn ? "" :
+    `<div class="tools"><button type="button" class="replay" title="${t().replay}">${REPLAY_ICON}</button></div>`;
+  box.innerHTML = html + img + tools;
+  const r = box.querySelector(".replay");
+  if (r) {
+    const say = plainForSpeech(text), sayLang = lang;
+    r.addEventListener("click", () => { if (busy()) return; setState("answering"); speak(say, sayLang, () => setState("idle")); });
+  }
+}
+
+// ---- พิมพ์คำตอบแบบค่อย ๆ ไหล: รับข้อความเข้ามาเป็นก้อน แต่โชว์ไล่ตามทีละนิดให้ลื่น ----
+function typewriter(m) {
+  let full = "", shown = 0, finished = false, finalOpts = null, onDone = null, raf = 0;
+  function frame() {
+    const follow = nearBottom();
+    const backlog = full.length - shown;
+    if (backlog > 0) {
+      shown += Math.max(1, Math.ceil(backlog / 14));   // ค้างเยอะ = เร่ง, ค้างน้อย = ช้าลง
+      renderBot(m, full.slice(0, shown));
+    }
+    if (follow) scroller.scrollTop = scroller.scrollHeight;
+    if (finished && shown >= full.length) {
+      renderBot(m, full, { ...finalOpts, done: true });
+      if (follow) scrollDown();
+      raf = 0; if (onDone) onDone();
+      return;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  return {
+    push(piece) { full += piece; if (!raf) raf = requestAnimationFrame(frame); },
+    finish(opts, cb) { finished = true; finalOpts = opts; onDone = cb; if (!raf) raf = requestAnimationFrame(frame); },
+    get text() { return full; },
+  };
 }
 // ---- โชว์แผนผังทันที (ไม่เรียก /ask) ----
 function showMap() {
@@ -192,32 +236,60 @@ function speak(text, speakLang, onEnd) {
 async function ask(question, opts = {}) {
   question = (question || "").trim();
   if (!question) { setState("idle"); return; }
-  const askLang = lang;
+  const askLang = lang, myConvo = convo;
+  const stale = () => myConvo !== convo;
   addMsg("user", question, { voice: !!opts.voice });
   setState("thinking"); typing(true);
+  const fail = (msg) => {
+    if (stale()) return;
+    typing(false);
+    addMsg("bot", msg || t().sysErr, { warn: true });
+    setState("error");
+    setTimeout(() => setState("idle"), 2500);
+  };
   try {
-    const r = await fetch("/ask", {
+    const r = await fetch("/ask/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, lang: askLang }),
     });
-    const d = await r.json();
-    typing(false);
     if (!r.ok) {
       // โชว์สาเหตุจริงจากเซิร์ฟเวอร์ (เช่น ยังไม่ได้ตั้งค่า API key) จะได้แก้ถูกจุด
-      addMsg("bot", d.error || t().sysErr, { warn: true });
-      setState("error");
-      setTimeout(() => setState("idle"), 2500);
+      const d = await r.json().catch(() => ({}));
+      fail(d.error);
       return;
     }
-    const answer = d.answer || "";
-    addMsg("bot", answer, { image: d.image || null });
-    setState("answering");
-    speak(plainForSpeech(answer), askLang, () => setState("idle"));
+    // อ่านคำตอบทีละบรรทัด JSON: {"t": ท่อนใหม่} … {"done": true, "image": …} หรือ {"error": …}
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", tw = null, end = null;
+    while (!end) {
+      const { value, done } = await reader.read();
+      if (stale()) { reader.cancel().catch(() => {}); return; }
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line) continue;
+        const msg = JSON.parse(line);
+        if (msg.t) {
+          if (!tw) {   // ท่อนแรกมาถึง: เลิกโชว์ shimmer เริ่มพิมพ์คำตอบ
+            typing(false); setState("answering");
+            const m = document.createElement("div");
+            m.className = "msg bot"; m.innerHTML = AVA + '<div class="a-body"></div>';
+            chat.appendChild(m); tw = typewriter(m);
+          }
+          tw.push(msg.t);
+        } else if (msg.done || msg.error) { end = msg; break; }
+      }
+    }
+    if (!tw) { fail(end && end.error); return; }          // พังก่อนได้สักคำ
+    tw.finish({ image: (end && end.image) || null }, () => {
+      if (stale()) return;
+      if (end && end.error) addMsg("bot", t().sysErr, { warn: true });   // ขาดกลางทาง: ที่ได้แล้วยังอยู่
+      speak(plainForSpeech(tw.text), askLang, () => setState("idle"));
+    });
   } catch (e) {
-    typing(false);
-    addMsg("bot", t().sysErr, { warn: true });
-    setState("error");
-    setTimeout(() => setState("idle"), 2500);
+    fail();
   }
 }
 
@@ -261,6 +333,7 @@ document.querySelectorAll("#quickQs .chip").forEach((chip) => {
 function newChat() {
   if (recog && listening) { recog.stop(); listening = false; }
   window.speechSynthesis && window.speechSynthesis.cancel();
+  convo++;
   chat.innerHTML = "";
   setView("welcome");
   setState("idle");
