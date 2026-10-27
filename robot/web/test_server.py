@@ -139,6 +139,16 @@ def test_wants_map_false_for_non_location():
     assert wayfinding.wants_map("สมัครเรียนต้องมีคุณสมบัติอะไร") is False
     assert wayfinding.wants_map("ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง") is False
     assert wayfinding.wants_map("") is False
+    assert wayfinding.wants_map("สาขานี้มีจุดเด่นอะไร") is False
+
+
+def test_wants_map_false_for_off_campus_questions():
+    """ถามที่เที่ยว/ของฝากนอกวิทยาลัย ต้องไม่แนบแผนผังวิทยาลัย แม้มีคำว่า 'ที่ไหน'"""
+    assert wayfinding.wants_map("เสาไห้มีที่ไหนน่าเที่ยว") is False
+    assert wayfinding.wants_map("สระบุรีมีที่เที่ยวที่ไหนบ้าง") is False
+    assert wayfinding.wants_map("ซื้อของฝากได้ที่ไหน") is False
+    assert wayfinding.wants_map("น้ำตกเจ็ดสาวน้อยไปยังไง") is False
+    assert wayfinding.wants_map("ใกล้วิทยาลัยมีร้านอาหารอร่อยตรงไหนบ้าง") is False
 
 
 # ---------- map asset ----------
@@ -185,6 +195,13 @@ def test_screen_has_map_chip():
     html = screen.data.decode("utf-8")
     assert "แผนผังวิทยาลัย" in html
     assert 'data-action="showMap"' in html
+
+
+def test_screen_chips_cover_college_and_saraburi():
+    html = make_client().get("/screen").data.decode("utf-8")
+    assert "ค่าเทอมเท่าไหร่" not in html          # ไม่มีข้อมูลค่าเทอม กดแล้วได้แค่ "ติดต่อเจ้าหน้าที่"
+    assert 'data-q="สระบุรีมีที่เที่ยวที่ไหนบ้าง"' in html
+    assert 'data-q="ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง"' in html
 
 
 # ---------- gpio_btn ----------

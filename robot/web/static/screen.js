@@ -126,7 +126,7 @@ document.querySelectorAll("#quickQs .chip").forEach((b) => {
   b.addEventListener("click", () => {
     if (document.body.classList.contains("state-thinking")) return; // กันแตะรัวระหว่างหุ่นกำลังคิด
     if (b.dataset.action === "showMap") { showMap(); return; }
-    ask(b.textContent.trim(), { voice: false });
+    ask(b.dataset.q || b.textContent.trim(), { voice: false }); // data-q = คำถามเต็ม, ป้ายบนปุ่มย่อให้สั้น
   });
 });
 
