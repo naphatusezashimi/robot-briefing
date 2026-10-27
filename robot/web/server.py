@@ -20,7 +20,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from flask import Flask, request, jsonify, send_from_directory, Response  # noqa: E402
 import config                                                   # noqa: E402
-from database import load_college_data                          # noqa: E402
+from database import load_college_data, load_saraburi_data      # noqa: E402
 from ai import ask_ai                                           # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
 import queue                                                   # noqa: E402
@@ -30,6 +30,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
+saraburi_data = load_saraburi_data()
 state = {"value": "idle"}   # idle | listening | thinking | answering | error
 
 button_queue: queue.Queue = queue.Queue()
@@ -103,7 +104,7 @@ def ask():
         return jsonify(error=problem), 500
     state["value"] = "thinking"
     try:
-        answer = ask_ai(question, college_data)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+        answer = ask_ai(question, college_data, saraburi_data)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
         state["value"] = "answering"
         result = {"answer": answer}
         if wants_map(question):

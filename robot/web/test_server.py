@@ -35,7 +35,7 @@ def test_ask_returns_answer_and_sets_answering(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
     # mock สมองไม่ให้ยิง API จริง (monkeypatch คืนค่าเดิมให้อัตโนมัติหลังจบเทสต์)
-    monkeypatch.setattr(server, "ask_ai", lambda question, data: f"ตอบ: {question}")
+    monkeypatch.setattr(server, "ask_ai", lambda question, college_data, saraburi_data: f"ตอบ: {question}")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 200
     assert r.get_json()["answer"] == "ตอบ: เปิดสอนอะไร"
@@ -46,7 +46,7 @@ def test_ask_error_sets_error_state_and_500(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
 
-    def boom(question, data):
+    def boom(question, college_data, saraburi_data):
         raise RuntimeError("เน็ตล่ม")
 
     monkeypatch.setattr(server, "ask_ai", boom)
@@ -62,7 +62,7 @@ def test_ask_without_api_key_returns_setup_instructions(monkeypatch):
     monkeypatch.setattr(server.config, "AI_PROVIDER", "gemini")
     monkeypatch.setattr(server.config, "GEMINI_API_KEY", "")
     called = []
-    monkeypatch.setattr(server, "ask_ai", lambda q, d: called.append(q) or "x")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: called.append(q) or "x")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 500
     err = r.get_json()["error"]
@@ -77,7 +77,7 @@ def test_ask_with_placeholder_key_returns_setup_instructions(monkeypatch):
     c = make_client()
     monkeypatch.setattr(server.config, "AI_PROVIDER", "gemini")
     monkeypatch.setattr(server.config, "GEMINI_API_KEY", "AIzaxxxxxxxxxxxxxxxxxxxxxxxx")
-    monkeypatch.setattr(server, "ask_ai", lambda q, d: "x")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "x")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 500
     assert "GEMINI_API_KEY" in r.get_json()["error"]
@@ -155,7 +155,7 @@ def test_map_asset_served():
 def test_ask_location_question_includes_image(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
-    monkeypatch.setattr(server, "ask_ai", lambda q, d: "อาคาร 7 ครับ")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "อาคาร 7 ครับ")
     monkeypatch.setattr(server, "wants_map", lambda q: True)
     r = c.post("/ask", json={"question": "สาขาอิเล็กทรอนิกส์อยู่ตึกไหน"})
     assert r.status_code == 200
@@ -167,7 +167,7 @@ def test_ask_location_question_includes_image(monkeypatch):
 def test_ask_non_location_question_no_image(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
-    monkeypatch.setattr(server, "ask_ai", lambda q, d: "ตอบ: ค่าเทอม")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "ตอบ: ค่าเทอม")
     monkeypatch.setattr(server, "wants_map", lambda q: False)
     r = c.post("/ask", json={"question": "ค่าเทอมเท่าไหร่"})
     assert r.status_code == 200

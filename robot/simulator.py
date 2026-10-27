@@ -3,7 +3,7 @@
 รัน: python simulator.py
 """
 
-from database import load_college_data
+from database import load_college_data, load_saraburi_data
 from ai import ask_ai
 from output import set_led, show_on_screen
 
@@ -15,6 +15,7 @@ def run():
     print("พิมพ์คำถามเกี่ยวกับวิทยาลัย หรือพิมพ์ q เพื่อออก\n")
 
     college_data = load_college_data()
+    saraburi_data = load_saraburi_data()
 
     while True:
         try:
@@ -28,7 +29,7 @@ def run():
                 break
 
             set_led("คิด")
-            answer = ask_ai(question, college_data)
+            answer = ask_ai(question, college_data, saraburi_data)
 
             set_led("ตอบ")
             show_on_screen(answer)
