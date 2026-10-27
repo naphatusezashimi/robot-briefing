@@ -273,3 +273,65 @@ def test_screen_has_language_and_theme_switches():
     assert 'data-lang="en"' in html
     assert 'id="themeBtn"' in html
     assert 'data-q-en="What are the places to visit in Saraburi?"' in html
+
+
+# ---------- คำตอบแบบทยอยไหล (/ask/stream) ----------
+
+import json as _json
+
+
+def _lines(r):
+    return [_json.loads(l) for l in r.get_data(as_text=True).splitlines() if l.strip()]
+
+
+def test_ask_stream_sends_pieces_then_done(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": iter(["สวัส", "ดีค่ะ"]))
+    monkeypatch.setattr(server, "wants_map", lambda q: False)
+    r = c.post("/ask/stream", json={"question": "hi"})
+    assert r.status_code == 200
+    assert _lines(r) == [{"t": "สวัส"}, {"t": "ดีค่ะ"}, {"done": True, "image": None}]
+    assert server.state["value"] == "answering"
+
+
+def test_ask_stream_passes_language_and_map(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    seen = []
+    monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": seen.append(lang) or iter(["x"]))
+    r = c.post("/ask/stream", json={"question": "Where is the canteen?", "lang": "en"})
+    assert seen == ["en"]
+    assert _lines(r)[-1] == {"done": True, "image": "/static/map.jpg"}
+
+
+def test_ask_stream_error_midway_keeps_text_and_reports(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+
+    def broken(q, c_, s, lang="th"):
+        yield "ครึ่ง"
+        raise RuntimeError("503 overloaded")
+
+    monkeypatch.setattr(server, "ask_ai_stream", broken)
+    lines = _lines(c.post("/ask/stream", json={"question": "x"}))
+    assert lines[0] == {"t": "ครึ่ง"}
+    assert "ยุ่ง" in lines[-1]["error"]          # 503 → ข้อความที่คนอ่านเข้าใจ
+    assert server.state["value"] == "error"
+
+
+def test_ask_stream_without_key_returns_500(monkeypatch):
+    c = make_client()
+    monkeypatch.setattr(server.config, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "")
+    r = c.post("/ask/stream", json={"question": "x"})
+    assert r.status_code == 500
+    assert "GEMINI_API_KEY" in r.get_json()["error"]
+
+
+def test_friendly_error_messages():
+    quota = RuntimeError("429 RESOURCE_EXHAUSTED. quota exceeded")
+    assert "โควตา" in server.friendly_error(quota, "th")
+    assert "quota" in server.friendly_error(quota, "en")
+    assert "busy" in server.friendly_error(RuntimeError("503 UNAVAILABLE"), "en")
+    assert server.friendly_error(RuntimeError("อื่น ๆ"), "th") == "อื่น ๆ"

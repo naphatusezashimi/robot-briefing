@@ -21,8 +21,9 @@ for _stream in (sys.stdout, sys.stderr):
 from flask import Flask, request, jsonify, send_from_directory, Response  # noqa: E402
 import config                                                   # noqa: E402
 from database import load_college_data, load_saraburi_data      # noqa: E402
-from ai import ask_ai                                           # noqa: E402
+from ai import ask_ai, ask_ai_stream                            # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
+import json                                                    # noqa: E402
 import queue                                                   # noqa: E402
 from gpio_btn import GpioButton                                # noqa: E402
 
@@ -117,6 +118,59 @@ def ask():
     except Exception as e:
         state["value"] = "error"
         return jsonify(error=str(e)), 500
+
+
+_FRIENDLY = {
+    "quota": {
+        "th": "วันนี้มีคนถามเยอะจนโควตา AI หมดแล้วค่ะ 😅 ลองใหม่พรุ่งนี้ หรือติดต่อเจ้าหน้าที่ได้ที่ 0-3628-1295 นะคะ",
+        "en": "So many questions today that the AI quota ran out 😅 Please try again tomorrow, or call our staff at 0-3628-1295.",
+    },
+    "busy": {
+        "th": "ตอนนี้ระบบ AI ยุ่งมากค่ะ ⏳ รอสักครู่แล้วถามใหม่อีกครั้งนะคะ",
+        "en": "The AI service is very busy right now ⏳ Please wait a moment and ask again.",
+    },
+}
+
+
+def friendly_error(e: Exception, lang: str) -> str:
+    """แปลง error ที่เจอบ่อยจาก AI ให้คนหน้าจออ่านเข้าใจ (อันอื่นโชว์ตามจริงไว้แก้ปัญหา)"""
+    msg = str(e)
+    if "RESOURCE_EXHAUSTED" in msg or "429" in msg or "rate_limit" in msg:
+        return _FRIENDLY["quota"][lang]
+    if "UNAVAILABLE" in msg or "503" in msg or "overloaded" in msg.lower() or "529" in msg:
+        return _FRIENDLY["busy"][lang]
+    return msg
+
+
+@app.post("/ask/stream")
+def ask_stream():
+    """เหมือน /ask แต่ทยอยส่งคำตอบ — ส่งเป็น JSON บรรทัดละก้อน (NDJSON):
+    {"t": "ข้อความท่อนใหม่"} ... แล้วจบด้วย {"done": true, "image": ...} หรือ {"error": "..."}"""
+    data = request.get_json(silent=True) or {}
+    question = (data.get("question") or "").strip()
+    lang = data.get("lang") if data.get("lang") in LANGS else "th"
+    problem = missing_key_error()
+    if problem:
+        state["value"] = "error"
+        return jsonify(error=problem), 500
+    state["value"] = "thinking"
+    image = "/static/map.jpg" if wants_map(question) else None
+
+    def generate():
+        line = lambda obj: json.dumps(obj, ensure_ascii=False) + "\n"   # noqa: E731
+        try:
+            for piece in ask_ai_stream(question, college_data, saraburi_data, lang=lang):
+                state["value"] = "answering"
+                yield line({"t": piece})
+            state["value"] = "answering"
+            yield line({"done": True, "image": image})
+        except Exception as e:
+            state["value"] = "error"
+            print(f"[ask/stream] {e}")   # ข้อความเต็มไว้ดูในหน้าต่างเซิร์ฟเวอร์
+            yield line({"error": friendly_error(e, lang)})
+
+    return Response(generate(), mimetype="application/x-ndjson",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 def main():
