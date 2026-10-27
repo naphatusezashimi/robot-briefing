@@ -25,13 +25,47 @@ function setState(s) {
 
 // ---- ฟองข้อความ ----
 function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+// AI ตอบเป็น markdown (**หัวข้อ**, * รายการ) — แปลงเป็นหัวข้อ/รายการสวย ๆ แทนการโชว์ดอกจัน
+function inlineMd(s) {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, "$1$2")   // *ตัวเอียง* → ข้อความธรรมดา
+    .replace(/\*/g, "");
+}
+function formatAnswer(text) {
+  let t = escapeHtml(text).replace(/\r/g, "");
+  // บางทีมาเป็นบรรทัดเดียวยาว ๆ — แยกบรรทัดก่อนรายการ " * " และก่อนหัวข้อ "**...:**"
+  t = t.replace(/\s+\*\s+(?=\S)/g, "\n* ").replace(/\s+(\*\*[^*\n]+?:\s*\*\*)/g, "\n$1");
+  let html = "", inList = false;
+  for (let line of t.split("\n")) {
+    line = line.trim();
+    const li = line.match(/^(?:[*\-•]|\d+[.)])\s+(.*)$/);
+    if (li) {
+      if (!inList) { html += '<ul class="md-list">'; inList = true; }
+      html += "<li>" + inlineMd(li[1]) + "</li>";
+      continue;
+    }
+    if (inList) { html += "</ul>"; inList = false; }
+    if (!line) continue;
+    const h = line.match(/^#{1,6}\s+(.*)$/) || line.match(/^\*\*([^*]+?)\*\*:?$/);
+    html += h ? '<div class="md-h">' + inlineMd(h[1]) + "</div>" : '<p class="md-p">' + inlineMd(line) + "</p>";
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+// เวลาพูด ไม่ต้องอ่านเครื่องหมาย markdown และอีโมจิ
+function plainForSpeech(text) {
+  return text.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "")
+    .replace(/^#{1,6}\s+/gm, "").replace(/\s\*\s+/g, " ").replace(/[*#•]/g, "").replace(/\s+/g, " ").trim();
+}
 function addMsg(role, text, opts = {}) {
   const m = document.createElement("div");
   m.className = "msg " + role;
   const tag = opts.voice ? '<span class="mic-tag">🎤 พูด</span>' : "";
   const ava = role === "bot" ? '<div class="ava"><i></i><i></i></div>' : "";
   const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="แผนผังวิทยาลัย">` : "";
-  m.innerHTML = ava + '<div class="bubble' + (opts.warn ? " warn" : "") + '">' + tag + escapeHtml(text) + img + "</div>";
+  m.innerHTML = ava + '<div class="bubble' + (opts.warn ? " warn" : "") + '">' + tag + (role === "bot" ? formatAnswer(text) : escapeHtml(text)) + img + "</div>";
   chat.appendChild(m); chat.scrollTop = chat.scrollHeight;
 }
 // ---- โชว์แผนผังทันที (ไม่เรียก /ask) ----
@@ -85,7 +119,7 @@ async function ask(question, opts = {}) {
     const answer = d.answer || "";
     addMsg("bot", answer, { image: d.image || null });
     setState("answering");
-    speak(answer, () => setState("idle"));
+    speak(plainForSpeech(answer), () => setState("idle"));
   } catch (e) {
     typing(false);
     addMsg("bot", "ขออภัยค่ะ ระบบขัดข้อง ลองใหม่อีกครั้งนะคะ", { warn: true });
