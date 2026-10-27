@@ -31,7 +31,8 @@ app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
 saraburi_data = load_saraburi_data()
-state = {"value": "idle"}   # idle | listening | thinking | answering | error
+state = {"value": "idle", "lang": "th"}   # value: idle | listening | thinking | answering | error
+LANGS = ("th", "en")                    # ภาษาที่จอเนื้อหาเลือก — จอใบหน้าใช้ตามนี้
 
 button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
@@ -90,21 +91,24 @@ def state_endpoint():
         new = data.get("state")
         if new:
             state["value"] = new
-        return jsonify(ok=True, state=state["value"])
-    return jsonify(state=state["value"])
+        if data.get("lang") in LANGS:
+            state["lang"] = data["lang"]
+        return jsonify(ok=True, state=state["value"], lang=state["lang"])
+    return jsonify(state=state["value"], lang=state["lang"])
 
 
 @app.post("/ask")
 def ask():
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
+    lang = data.get("lang") if data.get("lang") in LANGS else "th"
     problem = missing_key_error()
     if problem:
         state["value"] = "error"
         return jsonify(error=problem), 500
     state["value"] = "thinking"
     try:
-        answer = ask_ai(question, college_data, saraburi_data)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+        answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
         state["value"] = "answering"
         result = {"answer": answer}
         if wants_map(question):

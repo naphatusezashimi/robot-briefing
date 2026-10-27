@@ -48,7 +48,7 @@ def test_ask_ai_passes_saraburi_data_to_system_prompt(monkeypatch):
     saraburi = {"ท่องเที่ยวสระบุรี": {}}
     captured = {}
 
-    def fake_ask_gemini(question, c_data, s_data):
+    def fake_ask_gemini(question, c_data, s_data, lang="th"):
         captured["college"] = c_data
         captured["saraburi"] = s_data
         return "ตอบ"
@@ -58,3 +58,10 @@ def test_ask_ai_passes_saraburi_data_to_system_prompt(monkeypatch):
     ai.ask_ai("ถามอะไร", college, saraburi)
     assert captured["college"] == college
     assert captured["saraburi"] == saraburi
+
+
+def test_english_mode_adds_english_rule_only_when_chosen():
+    import ai
+    assert "English" in ai._rules("en")
+    assert ai._rules("th") == ai._SYSTEM_RULES
+    assert "English" in ai._system_text({}, {}, "en")

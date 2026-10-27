@@ -35,7 +35,7 @@ def test_ask_returns_answer_and_sets_answering(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
     # mock สมองไม่ให้ยิง API จริง (monkeypatch คืนค่าเดิมให้อัตโนมัติหลังจบเทสต์)
-    monkeypatch.setattr(server, "ask_ai", lambda question, college_data, saraburi_data: f"ตอบ: {question}")
+    monkeypatch.setattr(server, "ask_ai", lambda question, college_data, saraburi_data, lang="th": f"ตอบ: {question}")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 200
     assert r.get_json()["answer"] == "ตอบ: เปิดสอนอะไร"
@@ -46,7 +46,7 @@ def test_ask_error_sets_error_state_and_500(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
 
-    def boom(question, college_data, saraburi_data):
+    def boom(question, college_data, saraburi_data, lang="th"):
         raise RuntimeError("เน็ตล่ม")
 
     monkeypatch.setattr(server, "ask_ai", boom)
@@ -62,7 +62,7 @@ def test_ask_without_api_key_returns_setup_instructions(monkeypatch):
     monkeypatch.setattr(server.config, "AI_PROVIDER", "gemini")
     monkeypatch.setattr(server.config, "GEMINI_API_KEY", "")
     called = []
-    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: called.append(q) or "x")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s, lang="th": called.append(q) or "x")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 500
     err = r.get_json()["error"]
@@ -77,7 +77,7 @@ def test_ask_with_placeholder_key_returns_setup_instructions(monkeypatch):
     c = make_client()
     monkeypatch.setattr(server.config, "AI_PROVIDER", "gemini")
     monkeypatch.setattr(server.config, "GEMINI_API_KEY", "AIzaxxxxxxxxxxxxxxxxxxxxxxxx")
-    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "x")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s, lang="th": "x")
     r = c.post("/ask", json={"question": "เปิดสอนอะไร"})
     assert r.status_code == 500
     assert "GEMINI_API_KEY" in r.get_json()["error"]
@@ -165,7 +165,7 @@ def test_map_asset_served():
 def test_ask_location_question_includes_image(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
-    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "อาคาร 7 ครับ")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s, lang="th": "อาคาร 7 ครับ")
     monkeypatch.setattr(server, "wants_map", lambda q: True)
     r = c.post("/ask", json={"question": "สาขาอิเล็กทรอนิกส์อยู่ตึกไหน"})
     assert r.status_code == 200
@@ -177,7 +177,7 @@ def test_ask_location_question_includes_image(monkeypatch):
 def test_ask_non_location_question_no_image(monkeypatch):
     c = make_client()
     set_valid_key(monkeypatch)
-    monkeypatch.setattr(server, "ask_ai", lambda q, c, s: "ตอบ: ค่าเทอม")
+    monkeypatch.setattr(server, "ask_ai", lambda q, c, s, lang="th": "ตอบ: ค่าเทอม")
     monkeypatch.setattr(server, "wants_map", lambda q: False)
     r = c.post("/ask", json={"question": "ค่าเทอมเท่าไหร่"})
     assert r.status_code == 200
@@ -230,3 +230,46 @@ def test_events_endpoint_returns_stream(monkeypatch):
     assert r.status_code == 200
     assert "text/event-stream" in r.content_type
     assert b"data: connected" in r.data
+
+
+# ---------- ภาษา (th/en) ----------
+
+def test_state_carries_language_for_face():
+    """จอเนื้อหาเลือกภาษา → เซิร์ฟเวอร์จำไว้ → จอใบหน้าอ่านจาก GET /state"""
+    c = make_client()
+    server.state["lang"] = "th"
+    assert c.get("/state").get_json()["lang"] == "th"
+    r = c.post("/state", json={"state": "idle", "lang": "en"})
+    assert r.get_json()["lang"] == "en"
+    assert c.get("/state").get_json()["lang"] == "en"
+    c.post("/state", json={"state": "idle", "lang": "fr"})   # ภาษาที่ไม่รองรับ ไม่เปลี่ยน
+    assert c.get("/state").get_json()["lang"] == "en"
+    server.state["lang"] = "th"
+
+
+def test_ask_passes_language_to_ai(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    seen = []
+    monkeypatch.setattr(server, "ask_ai", lambda q, c_, s, lang="th": seen.append(lang) or "ok")
+    c.post("/ask", json={"question": "hello", "lang": "en"})
+    c.post("/ask", json={"question": "สวัสดี"})                 # ไม่ส่ง lang = ไทย
+    c.post("/ask", json={"question": "x", "lang": "evil"})      # ค่าแปลก = ไทย
+    assert seen == ["en", "th", "th"]
+
+
+def test_wants_map_english_questions():
+    assert wayfinding.wants_map("Where is the canteen?") is True
+    assert wayfinding.wants_map("Can I see the campus map?") is True
+    assert wayfinding.wants_map("Where is the electronics building?") is True
+    assert wayfinding.wants_map("Where is the workshop?") is True
+    assert wayfinding.wants_map("What are the places to visit in Saraburi?") is False
+    assert wayfinding.wants_map("Where can I buy souvenirs?") is False
+    assert wayfinding.wants_map("What programs does the college offer?") is False
+
+
+def test_screen_has_language_and_theme_switches():
+    html = make_client().get("/screen").data.decode("utf-8")
+    assert 'data-lang="en"' in html
+    assert 'id="themeBtn"' in html
+    assert 'data-q-en="What are the places to visit in Saraburi?"' in html

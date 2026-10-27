@@ -33,6 +33,21 @@ _SYSTEM_RULES = (
     "และแนะนำให้ติดต่อเจ้าหน้าที่วิทยาลัยโดยตรง (โทร 0-3628-1295)"
 )
 
+# --- ผู้ใช้เลือกภาษาอังกฤษบนจอ: ข้อมูลยังเป็นภาษาไทย ให้ AI แปลตอนตอบ ---
+_LANG_RULES = {
+    "en": (
+        "\n\nIMPORTANT: The user has chosen English. Reply entirely in natural, friendly English "
+        "(translate the Thai data; write Thai place names in English letters). "
+        "Keep the same cheerful tone, emojis, **Heading:** and * list format. "
+        "If the information is not available, say 'Sorry, I don't have that information yet' "
+        "and suggest contacting the college staff (Tel. 0-3628-1295)."
+    ),
+}
+
+
+def _rules(lang: str) -> str:
+    return _SYSTEM_RULES + _LANG_RULES.get(lang, "")
+
 _NO_QUESTION = "ขออภัยค่ะ ไม่ได้ยินคำถาม กรุณาถามใหม่อีกครั้งนะคะ"
 
 # clients สร้างแบบ lazy — สร้างเฉพาะเจ้าที่ใช้จริง จะได้ไม่ error เพราะ key อีกเจ้าว่าง
@@ -40,11 +55,11 @@ _claude_client = None
 _gemini_client = None
 
 
-def _system_text(college_data: dict, saraburi_data: dict) -> str:
-    return _SYSTEM_RULES + "\n\n" + format_all_data(college_data, saraburi_data)
+def _system_text(college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
+    return _rules(lang) + "\n\n" + format_all_data(college_data, saraburi_data)
 
 
-def _ask_gemini(question: str, college_data: dict, saraburi_data: dict) -> str:
+def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
     global _gemini_client
     if _gemini_client is None:
         from google import genai
@@ -56,7 +71,7 @@ def _ask_gemini(question: str, college_data: dict, saraburi_data: dict) -> str:
         model=GEMINI_MODEL,
         contents=question,
         config=types.GenerateContentConfig(
-            system_instruction=_system_text(college_data, saraburi_data),
+            system_instruction=_system_text(college_data, saraburi_data, lang),
             max_output_tokens=AI_MAX_TOKENS,
             temperature=0.2,
             # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
@@ -66,7 +81,7 @@ def _ask_gemini(question: str, college_data: dict, saraburi_data: dict) -> str:
     return (response.text or "").strip()
 
 
-def _ask_claude(question: str, college_data: dict, saraburi_data: dict) -> str:
+def _ask_claude(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
     global _claude_client
     if _claude_client is None:
         import anthropic
@@ -76,7 +91,7 @@ def _ask_claude(question: str, college_data: dict, saraburi_data: dict) -> str:
         model=CLAUDE_MODEL,
         max_tokens=AI_MAX_TOKENS,
         system=[
-            {"type": "text", "text": _SYSTEM_RULES},
+            {"type": "text", "text": _rules(lang)},
             {
                 # ข้อมูลวิทยาลัย+สระบุรี ถูก cache ที่ server — ประหยัด token ในการทดสอบซ้ำ
                 "type": "text",
@@ -89,13 +104,13 @@ def _ask_claude(question: str, college_data: dict, saraburi_data: dict) -> str:
     return response.content[0].text
 
 
-def ask_ai(question: str, college_data: dict, saraburi_data: dict) -> str:
+def ask_ai(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
     if not question.strip():
         return _NO_QUESTION
 
     if AI_PROVIDER == "gemini":
-        return _ask_gemini(question, college_data, saraburi_data)
+        return _ask_gemini(question, college_data, saraburi_data, lang)
     elif AI_PROVIDER == "claude":
-        return _ask_claude(question, college_data, saraburi_data)
+        return _ask_claude(question, college_data, saraburi_data, lang)
     else:
         raise ValueError(f"AI_PROVIDER ไม่รู้จัก: '{AI_PROVIDER}' (ใช้ได้: 'gemini' หรือ 'claude')")
