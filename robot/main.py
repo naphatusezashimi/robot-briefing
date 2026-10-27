@@ -13,13 +13,14 @@ def main():
         return
 
     # โหมดฮาร์ดแวร์จริง (เฟส 3)
-    from database import load_college_data
+    from database import load_college_data, load_saraburi_data
     from stt import record_audio, speech_to_text
     from ai import ask_ai
     from tts import text_to_speech
     from output import set_led, show_on_screen, play_audio
 
     college_data = load_college_data()
+    saraburi_data = load_saraburi_data()
     print("=== หุ่นยนต์วิทยาลัยเทคนิคท่าหลวง พร้อมทำงาน ===")
 
     while True:
@@ -29,7 +30,7 @@ def main():
             question = speech_to_text()
 
             set_led("คิด")
-            answer = ask_ai(question, college_data)
+            answer = ask_ai(question, college_data, saraburi_data)
 
             set_led("ตอบ")
             show_on_screen(answer)
