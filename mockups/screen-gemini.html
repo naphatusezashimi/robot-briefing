@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<!--
+  MOCKUP (ดีไซน์อย่างเดียว ยังไม่ต่อ AI จริง) — จอเนื้อหาแบบใหม่ สไตล์คล้าย Gemini
+  - สลับโหมดมืด/สว่าง และภาษาไทย/อังกฤษ ได้ที่มุมขวาบน (จำค่าไว้ในเบราว์เซอร์)
+  - พื้นมีแสงเรืองตรงกลาง เปลี่ยนสี/เต้นตามสถานะ: ฟัง = ชมพูม่วง, คิด = ม่วง
+  - หน้าแรก: หัวข้อกลางจอ + ช่องถามทรงแคปซูล + ปุ่มคำถามแนะนำ
+  - ถามแล้ว: ช่องถามเลื่อนลงล่าง คำตอบไม่มีกรอบ อ่านเหมือนบทความ
+  - แถบซ้าย = หมวดคำถาม (แทนประวัติแชท) — จอแคบจะซ่อนให้เอง
+  เปิดไฟล์นี้ตรง ๆ ในเบราว์เซอร์ได้เลย ใช้แผงมุมขวาล่างสลับหน้าจอ
+-->
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>จอเนื้อหา สไตล์ใหม่</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- สี: มืดเป็นค่าเริ่มต้น ---------- */
+  :root{
+    --bg:#131314; --side:#1b1c1d; --surface:#1e1f20; --surface-2:#2a2b2d; --hover:#282a2c;
+    --ink:#e3e3e3; --strong:#ffffff; --muted:#9aa0a6; --line:#2e3033; --head:#8ab4f8;
+    --accent-bg:#1f3760; --accent-ink:#d3e3fd;
+    --shim-a:#232527; --shim-b:#3a4560; --map-a:#1d2c4a; --map-b:#2d2350;
+    --bar-shadow:0 10px 40px -12px rgba(0,0,0,.6);
+    --g1:#4b8df8; --g2:#9b72f2; --g3:#d96570;
+    --grad:linear-gradient(90deg,var(--g1),var(--g2) 55%,var(--g3));
+    --glow:30,64,175; --glow-k:.55;   /* สีแสงเรืองตรงกลาง (rgb) + ความเข้ม */
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
+    --bg:#ffffff; --side:#f0f4f9; --surface:#f0f4f9; --surface-2:#e9eef6; --hover:#e4e9f1;
+    --ink:#1f1f1f; --strong:#000000; --muted:#5f6670; --line:#dde3ea; --head:#0b57d0;
+    --accent-bg:#d3e3fd; --accent-ink:#041e49;
+    --shim-a:#e9eef6; --shim-b:#c6d6f5; --map-a:#d6e4fb; --map-b:#e6dcfb;
+    --bar-shadow:0 8px 28px -14px rgba(30,60,120,.35);
+    --glow:120,165,255; --glow-k:.38;
+    color-scheme:light;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"IBM Plex Sans Thai",system-ui,sans-serif;background:var(--bg);color:var(--ink);
+    display:flex;overflow:hidden;transition:background .4s,color .4s}
+  button{font:inherit;color:inherit}
+  [data-t]{font-style:normal}
+
+  /* ---------- แถบซ้าย ---------- */
+  aside{width:280px;flex:none;background:var(--side);display:flex;flex-direction:column;padding:14px 10px;transition:background .4s}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+  .brand img{width:34px;height:34px;border-radius:50%;background:#fff;object-fit:contain;padding:2px;border:1px solid var(--line)}
+  .brand b{font-family:"Mitr";font-weight:400;font-size:1.05rem;display:block;line-height:1.2}
+  .brand small{font-size:.7rem;color:var(--muted)}
+  .nav{all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:999px;
+    font-size:.88rem;transition:background .2s}
+  .nav:hover{background:var(--hover)}
+  .nav.on{background:var(--accent-bg);color:var(--accent-ink)}
+  .nav span{width:22px;text-align:center}
+  .sec{font-size:.74rem;color:var(--muted);padding:18px 12px 6px}
+  .side-foot{margin-top:auto;padding:12px;font-size:.72rem;color:var(--muted);line-height:1.5;border-top:1px solid var(--line)}
+  .side-foot b{color:var(--ink);font-weight:500}
+
+  /* ---------- พื้นที่หลัก ---------- */
+  .stage{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;isolation:isolate}
+  .stage::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background:radial-gradient(42% 46% at 50% 48%,rgba(var(--glow),var(--glow-k)),rgba(var(--glow),calc(var(--glow-k)*.33)) 45%,transparent 72%);
+    transition:opacity .8s,background .8s}
+  body.v-thread .stage::before{opacity:.35}
+  body.s-listening{--glow:155,80,200}
+  :root[data-theme="light"] body.s-listening{--glow:220,140,240}
+  body.s-listening .stage::before{opacity:1;animation:breathe 1.4s ease-in-out infinite}
+  body.s-thinking{--glow:100,70,210}
+  :root[data-theme="light"] body.s-thinking{--glow:170,150,250}
+  body.s-thinking .stage::before{opacity:.8;animation:breathe 2.4s ease-in-out infinite}
+
+  .top{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:14px 20px}
+  .status{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--muted);
+    background:var(--surface);padding:7px 13px;border-radius:999px;margin-right:auto}
+  .status i{width:8px;height:8px;border-radius:50%;background:#34a853}
+  body.s-listening .status i{background:var(--g3);animation:blink .7s infinite}
+  body.s-thinking .status i{background:var(--g2);animation:blink 1s infinite}
+  .pill{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.8rem;padding:7px 14px;
+    border-radius:999px;background:var(--surface);transition:background .2s}
+  .pill:hover{background:var(--hover)}
+  .pill.accent{background:var(--accent-bg);color:var(--accent-ink)}
+  /* ปุ่มสลับภาษา TH | EN */
+  .seg{display:flex;background:var(--surface);border-radius:999px;padding:3px}
+  .seg button{all:unset;cursor:pointer;font-size:.76rem;font-weight:600;padding:5px 11px;border-radius:999px;color:var(--muted)}
+  .seg button.on{background:var(--accent-bg);color:var(--accent-ink)}
+  .icon-btn{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+    background:var(--surface);transition:background .2s}
+  .icon-btn:hover{background:var(--hover)}
+  .icon-btn svg{width:19px;height:19px;fill:currentColor}
+  :root[data-theme="light"] .i-sun,:root:not([data-theme="light"]) .i-moon{display:none}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:var(--surface-2);border-radius:9px}
+  .col{width:min(100% - 40px,760px);margin:0 auto}
+
+  /* หน้าแรก — อยู่กลางจอ */
+  .welcome{margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 0 60px}
+  body.v-thread .welcome{display:none}
+  .hello{font-family:"Mitr";font-weight:400;font-size:clamp(1.7rem,3.2vw,2.4rem);line-height:1.3;animation:rise .6s both}
+  .hello em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .welcome .sub{color:var(--muted);font-size:.95rem;margin:8px 0 28px;animation:rise .6s .08s both}
+  .welcome .bar{animation:rise .6s .15s both}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;animation:rise .6s .22s both}
+  .chip{all:unset;cursor:pointer;font-size:.85rem;padding:9px 15px;border-radius:999px;background:var(--surface);
+    border:1px solid var(--line);transition:background .2s}
+  .chip:hover{background:var(--hover)}
+
+  /* ช่องถาม */
+  .bar{width:100%;display:flex;align-items:center;gap:6px;background:var(--surface);border-radius:32px;
+    padding:8px 8px 8px 22px;min-height:64px;position:relative;box-shadow:var(--bar-shadow);transition:background .4s}
+  .bar input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:1rem;color:var(--ink)}
+  .bar input::placeholder{color:var(--muted)}
+  .ibtn{all:unset;cursor:pointer;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;flex:none;transition:background .2s}
+  .ibtn:hover{background:var(--hover)}
+  .ibtn svg{width:24px;height:24px;fill:currentColor}
+  .wave{display:none;flex:1;align-items:center;gap:4px;height:30px}
+  .wave i{width:4px;border-radius:3px;background:var(--grad);height:30%;animation:wave 1s ease-in-out infinite}
+  .wave i:nth-child(2n){animation-delay:.15s}.wave i:nth-child(3n){animation-delay:.3s}.wave i:nth-child(5n){animation-delay:.45s}
+  .wave span{font-size:.95rem;color:var(--muted);margin-left:10px;white-space:nowrap}
+  body.s-listening .bar input{display:none}
+  body.s-listening .wave{display:flex}
+  body.s-listening .bar::before{content:"";position:absolute;inset:-2px;border-radius:34px;z-index:-1;
+    background:conic-gradient(from var(--a),var(--g1),var(--g2),var(--g3),var(--g1));animation:spin-bg 2s linear infinite}
+  body.s-listening .ibtn.mic{background:var(--grad);color:#fff}
+  @property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+
+  /* บทสนทนา */
+  .thread{display:none;flex-direction:column;gap:26px;padding:10px 0 30px}
+  body.v-thread .thread{display:flex}
+  .q{align-self:flex-end;max-width:75%;background:var(--surface-2);padding:12px 18px;
+    border-radius:24px 6px 24px 24px;font-size:.98rem;line-height:1.5;animation:rise .4s both}
+  .q small{display:block;font-size:.7rem;color:var(--muted);margin-bottom:2px}
+  .a{display:flex;gap:16px;align-items:flex-start;animation:rise .5s both}
+  .a-body{flex:1;min-width:0;font-size:1rem;line-height:1.75;padding-top:3px}
+  .a-body p{margin-bottom:10px}
+  .a-body h3{font-size:1rem;font-weight:600;color:var(--head);margin:16px 0 4px}
+  .a-body ul{padding-left:22px;margin-bottom:10px}
+  .a-body li{margin:4px 0}.a-body li::marker{color:var(--g2)}
+  .a-body b{font-weight:600;color:var(--strong)}
+  .tools{display:flex;gap:2px;margin-left:-8px}
+  .tools button{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+  .tools button:hover{background:var(--hover)}
+  .tools svg{width:19px;height:19px;fill:currentColor}
+  .map{width:100%;max-width:380px;aspect-ratio:4/3;border-radius:16px;margin:8px 0;
+    background:linear-gradient(135deg,var(--map-a),var(--map-b));display:grid;place-items:center;color:var(--muted);font-size:.85rem;border:1px solid var(--line)}
+
+  /* หน้าหุ่น + วงแหวนไล่สี */
+  .ava{position:relative;width:36px;height:36px;flex:none;border-radius:50%;display:grid;place-items:center}
+  .ava::before{content:"";position:absolute;inset:0;border-radius:50%;padding:2px;
+    background:conic-gradient(var(--g1),var(--g2),var(--g3),var(--g1));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .ava .face{width:30px;height:30px;border-radius:50%;background:#0b1626;display:flex;align-items:center;justify-content:center;gap:4px}
+  .ava .face i{width:5px;height:9px;border-radius:2px;background:#6fd3ff;box-shadow:0 0 6px #6fd3ff;animation:eye 4s infinite}
+  .ava.spin::before{animation:spin 1.1s linear infinite}
+  .shimmer{flex:1;padding-top:9px;display:flex;flex-direction:column;gap:10px}
+  .shimmer i{display:block;height:14px;border-radius:7px;
+    background:linear-gradient(90deg,var(--shim-a) 0%,var(--shim-b) 40%,var(--shim-a) 80%);background-size:300% 100%;animation:shim 1.6s linear infinite}
+  .shimmer i:nth-child(2){width:86%}.shimmer i:nth-child(3){width:58%}
+
+  .dock{flex:none;padding:8px 0 18px;display:none}
+  body.v-thread .dock{display:block}
+  .hint{text-align:center;font-size:.72rem;color:var(--muted);margin-top:10px}
+
+  /* แผงสลับ (เฉพาะ mockup) */
+  .demo{position:fixed;right:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:5px;padding:7px;border-radius:14px;
+    background:var(--surface-2);border:1px solid var(--line);z-index:10;max-width:calc(100% - 24px);
+    box-shadow:0 10px 30px -12px rgba(0,0,0,.4)}
+  .demo button{font-size:.74rem;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:transparent;cursor:pointer}
+  .demo button.on{background:var(--ink);color:var(--bg);border-color:transparent}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spin-bg{to{--a:360deg}}
+  @keyframes shim{from{background-position:100% 0}to{background-position:-200% 0}}
+  @keyframes wave{0%,100%{height:25%}50%{height:100%}}
+  @keyframes blink{50%{opacity:.3}}
+  @keyframes eye{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.15)}}
+  @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  @media (max-width:860px){aside{display:none}}
+  @media (max-width:520px){.col{width:calc(100% - 32px)}.q{max-width:88%}.top{padding:12px 16px}
+    .pill.accent span{display:none}.demo{left:12px;right:12px;justify-content:center}}
+</style>
+</head>
+<body class="v-welcome s-idle">
+  <aside>
+    <div class="brand">
+      <img src="../robot/web/static/logo.jpg" alt="">
+      <div><b data-t="brand"></b><small data-t="college"></small></div>
+    </div>
+    <button class="nav on" data-view="welcome"><span>✏️</span><i data-t="newChat"></i></button>
+    <div class="sec" data-t="secCollege"></div>
+    <button class="nav" data-view="map"><span>🗺️</span><i data-t="cMap"></i></button>
+    <button class="nav" data-ask><span>🎓</span><i data-t="cPrograms"></i></button>
+    <button class="nav" data-ask><span>📝</span><i data-t="cApply"></i></button>
+    <button class="nav" data-ask><span>📞</span><i data-t="cContact"></i></button>
+    <div class="sec" data-t="secTravel"></div>
+    <button class="nav" data-view="thread"><span>🏞️</span><i data-t="cTrips"></i></button>
+    <button class="nav" data-ask><span>🛍️</span><i data-t="cSouvenir"></i></button>
+    <button class="nav" data-ask><span>🍜</span><i data-t="cFood"></i></button>
+    <div class="side-foot"><b data-t="phone"></b><br><span data-t="phoneNote"></span></div>
+  </aside>
+
+  <div class="stage">
+    <div class="top">
+      <div class="status"><i></i><span id="statusText"></span></div>
+      <div class="seg" id="lang"><button data-lang="th">TH</button><button data-lang="en">EN</button></div>
+      <button class="icon-btn" id="theme">
+        <svg class="i-sun" viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24"><path d="M12.3 2a9.9 9.9 0 0 0 0 20c4.4 0 8.1-2.8 9.4-6.8A8 8 0 0 1 12.3 2z"/></svg>
+      </button>
+      <button class="pill accent" data-view="welcome">✏️ <span data-t="newShort"></span></button>
+    </div>
+
+    <div class="scroll" id="scroll">
+      <section class="welcome col">
+        <div class="hello" data-t="hello"></div>
+        <div class="sub" data-t="sub"></div>
+        <div class="bar" data-bar></div>
+        <div class="chips">
+          <button class="chip" data-view="map">🗺️ <i data-t="cMap"></i></button>
+          <button class="chip" data-ask>🎓 <i data-t="cPrograms"></i></button>
+          <button class="chip" data-ask>📝 <i data-t="cApply"></i></button>
+          <button class="chip" data-view="thread">🏞️ <i data-t="cTrips"></i></button>
+          <button class="chip" data-ask>🛍️ <i data-t="cSouvenir"></i></button>
+        </div>
+      </section>
+
+      <section class="thread col">
+        <div class="q"><small data-t="spoken"></small><span data-t="q1"></span></div>
+        <div class="a">
+          <div class="ava"><div class="face"><i></i><i></i></div></div>
+          <div class="a-body">
+            <div data-t="a1"></div>
+            <div class="tools">
+              <button data-title="replay"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg></button>
+              <button data-title="like"><svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zm20-11a2 2 0 0 0-2-2h-6.3l1-4.6v-.3c0-.4-.2-.8-.4-1.1L13.2 1 6.6 7.6C6.2 8 6 8.5 6 9v10a2 2 0 0 0 2 2h9c.8 0 1.5-.5 1.8-1.2l3-7.1c.1-.2.2-.5.2-.7v-2z"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="q" id="q2" hidden data-t="q2"></div>
+        <div class="a" id="thinking" hidden>
+          <div class="ava spin"><div class="face"><i></i><i></i></div></div>
+          <div class="shimmer"><i></i><i></i><i></i></div>
+        </div>
+        <div class="a" id="mapAns" hidden>
+          <div class="ava"><div class="face"><i></i><i></i></div></div>
+          <div class="a-body">
+            <p data-t="mapA"></p>
+            <div class="map" data-t="mapPh"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="dock"><div class="col"><div class="bar" data-bar></div><div class="hint" data-t="hint"></div></div></div>
+  </div>
+
+  <div class="demo" id="demo">
+    <button data-view="welcome" class="on" data-t="dWelcome"></button>
+    <button data-view="thread" data-t="dAnswer"></button>
+    <button data-view="listening" data-t="dListen"></button>
+    <button data-view="thinking" data-t="dThink"></button>
+    <button data-view="map" data-t="dMap"></button>
+  </div>
+
+<template id="barTpl">
+  <input data-ph="placeholder">
+  <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span data-t="listening"></span></div>
+  <button class="ibtn mic" data-title="mic">
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
+  </button>
+</template>
+
+<script>
+  // ---------- ข้อความสองภาษา ----------
+  const T = {
+    th: {
+      brand: "ผู้ช่วยท่าหลวงฯ", college: "วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์",
+      newChat: "เริ่มคุยใหม่", newShort: "คุยใหม่",
+      secCollege: "ถามเรื่องวิทยาลัย", secTravel: "เที่ยวสระบุรี",
+      cMap: "แผนผังวิทยาลัย", cPrograms: "สาขาที่เปิดสอน", cApply: "คุณสมบัติผู้สมัคร", cContact: "ช่องทางติดต่อ",
+      cTrips: "ที่เที่ยวสระบุรี", cSouvenir: "ของฝากขึ้นชื่อ", cFood: "ร้านอาหารแนะนำ",
+      phone: "โทร 0-3628-1295", phoneNote: "ข้อมูลไม่ครบ ติดต่อเจ้าหน้าที่ได้เลยค่ะ",
+      idle: "พร้อมคุย", listening: "กำลังฟัง… พูดได้เลยค่ะ", thinking: "กำลังคิด…", listeningShort: "กำลังฟัง…",
+      hello: "อยากรู้อะไรเกี่ยวกับ<em>ท่าหลวงฯ</em>ดี?", sub: "แตะไมค์เพื่อพูด หรือพิมพ์ถามได้เลยค่ะ 😊",
+      placeholder: "ถามอะไรก็ได้เกี่ยวกับวิทยาลัย…", mic: "กดเพื่อพูด", replay: "ฟังอีกครั้ง", like: "ถูกใจ",
+      spoken: "🎤 พูด", q1: "มวกเหล็กมีอะไรน่าเที่ยว",
+      a1: `<p>มวกเหล็กมีที่เที่ยวสายธรรมชาติเพียบเลยค่ะ 🌿</p>
+        <h3>💦 น้ำตก</h3><ul>
+        <li><b>น้ำตกเจ็ดสาวน้อย</b> — น้ำตก 7 ชั้น เล่นน้ำได้ เหมาะกับครอบครัว</li>
+        <li><b>น้ำตกโกรกอีดก</b> — สูง 20 เมตร อยู่ในป่าทึบ บรรยากาศร่มรื่น</li></ul>
+        <h3>🌻 ธรรมชาติและฟาร์ม</h3><ul>
+        <li><b>ฟาร์มโชคชัย</b> — ชมวัว ทำไอศกรีม กิจกรรมเพียบ</li>
+        <li><b>ไร่กุสุมา</b> — สวนผลไม้ มีที่พักด้วย</li></ul>
+        <p>อยากรู้ทางไปที่ไหนเพิ่มไหมคะ? 😊</p>`,
+      q2: "ขอดูแผนผังวิทยาลัยหน่อย", mapA: "นี่คือแผนผังวิทยาลัยค่ะ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย", mapPh: "[ รูปแผนผังวิทยาลัย ]",
+      hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะคะ",
+      dWelcome: "หน้าแรก", dAnswer: "คำตอบ", dListen: "กำลังฟัง", dThink: "กำลังคิด", dMap: "แผนผัง",
+      themeDark: "โหมดมืด", themeLight: "โหมดสว่าง",
+    },
+    en: {
+      brand: "Tha Luang Assistant", college: "Tha Luang Cement Thai Anusorn Technical College",
+      newChat: "New chat", newShort: "New chat",
+      secCollege: "About the college", secTravel: "Explore Saraburi",
+      cMap: "Campus map", cPrograms: "Programs offered", cApply: "Admission requirements", cContact: "Contact us",
+      cTrips: "Places to visit", cSouvenir: "Local souvenirs", cFood: "Where to eat",
+      phone: "Tel. 0-3628-1295", phoneNote: "Need more info? Our staff are happy to help.",
+      idle: "Ready", listening: "Listening… go ahead and speak", thinking: "Thinking…", listeningShort: "Listening…",
+      hello: "What would you like to know about <em>Tha Luang</em>?", sub: "Tap the mic to speak, or type your question 😊",
+      placeholder: "Ask anything about the college…", mic: "Tap to speak", replay: "Play again", like: "Like",
+      spoken: "🎤 Spoken", q1: "What's fun to see in Muak Lek?",
+      a1: `<p>Muak Lek is packed with nature spots! 🌿</p>
+        <h3>💦 Waterfalls</h3><ul>
+        <li><b>Chet Sao Noi Waterfall</b> — 7 tiers, great for swimming with family</li>
+        <li><b>Krok E Dok Waterfall</b> — 20 m tall, tucked away in shady forest</li></ul>
+        <h3>🌻 Nature &amp; farms</h3><ul>
+        <li><b>Chokchai Farm</b> — meet the cows, make ice cream, lots to do</li>
+        <li><b>Rai Kusuma</b> — fruit orchard with places to stay</li></ul>
+        <p>Want directions to any of these? 😊</p>`,
+      q2: "Can I see the campus map?", mapA: "Here's the campus map 🗺️ Tap the image to zoom in.", mapPh: "[ Campus map image ]",
+      hint: "Answers come from the college's own information. When in doubt, please ask our staff.",
+      dWelcome: "Home", dAnswer: "Answer", dListen: "Listening", dThink: "Thinking", dMap: "Map",
+      themeDark: "Dark mode", themeLight: "Light mode",
+    },
+  };
+
+  const body = document.body, root = document.documentElement, $ = id => document.getElementById(id);
+  const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  // ช่องถามมีสองที่ (กลางจอหน้าแรก / ล่างจอตอนคุย) ใช้แม่แบบเดียวกัน
+  document.querySelectorAll("[data-bar]").forEach(b => b.append($("barTpl").content.cloneNode(true)));
+
+  let lang = store.get("lang") || "th";
+  let state = "idle";
+  function applyLang(l) {
+    lang = l; store.set("lang", l);
+    const t = T[l];
+    root.lang = l;
+    document.querySelectorAll("[data-t]").forEach(e => e.innerHTML = t[e.dataset.t]);
+    document.querySelectorAll("[data-ph]").forEach(e => e.placeholder = t[e.dataset.ph]);
+    document.querySelectorAll("[data-title]").forEach(e => e.title = t[e.dataset.title]);
+    document.querySelectorAll("#lang button").forEach(b => b.classList.toggle("on", b.dataset.lang === l));
+    $("statusText").textContent = state === "listening" ? t.listeningShort : t[state];
+    updateThemeTitle();
+  }
+
+  // ---------- โหมดมืด/สว่าง (ครั้งแรกตามเครื่อง) ----------
+  let theme = store.get("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  function applyTheme(th) { theme = th; root.dataset.theme = th; store.set("theme", th); updateThemeTitle(); }
+  function updateThemeTitle() { $("theme").title = theme === "dark" ? T[lang].themeLight : T[lang].themeDark; }
+  $("theme").onclick = () => applyTheme(theme === "dark" ? "light" : "dark");
+  document.querySelectorAll("#lang button").forEach(b => b.onclick = () => applyLang(b.dataset.lang));
+
+  // ---------- สลับหน้าจอ (เฉพาะ mockup) ----------
+  let view = "welcome";
+  function show(v) {
+    state = v === "listening" || v === "thinking" ? v : "idle";
+    // กดไมค์จากหน้าแรก = ยังอยู่หน้าแรกแต่แสงเปลี่ยน
+    const welcome = v === "welcome" || (v === "listening" && view === "welcome");
+    view = welcome ? "welcome" : v;
+    body.className = (welcome ? "v-welcome" : "v-thread") + " s-" + state;
+    $("statusText").textContent = state === "listening" ? T[lang].listeningShort : T[lang][state];
+    $("q2").hidden = !(v === "thinking" || v === "map");
+    $("thinking").hidden = v !== "thinking";
+    $("mapAns").hidden = v !== "map";
+    document.querySelectorAll("#demo [data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+    if (!welcome) setTimeout(() => $("scroll").scrollTop = $("scroll").scrollHeight, 50);
+  }
+  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+  document.querySelectorAll("[data-ask]").forEach(b => b.addEventListener("click", () => show("thinking")));
+  document.querySelectorAll(".ibtn.mic").forEach(m => m.addEventListener("click", () =>
+    show(state === "listening" ? "thinking" : "listening")));
+  document.querySelectorAll(".bar input").forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") show("thinking"); }));
+
+  applyTheme(theme);
+  applyLang(lang);
+</script>
+</body>
+</html>
