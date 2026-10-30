@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<!--
+  จอ "เนื้อหา" ของหุ่นกล่องพูดได้ — วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์
+  ดีไซน์สไตล์ผู้ช่วย AI: หน้าแรกถามกลางจอ, ถามแล้วช่องถามย้ายลงล่าง, คำตอบไม่มีกรอบ
+  สลับโหมดมืด/สว่าง + ภาษาไทย/อังกฤษ ได้ที่มุมขวาบน (ภาษาส่งไปเซิร์ฟเวอร์ให้จอใบหน้าเปลี่ยนตาม)
+  ข้อความทุกภาษาอยู่ใน screen.js (ตัวแปร T) — ในนี้เป็นค่าเริ่มต้นภาษาไทย
+-->
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ผู้ช่วยท่าหลวงฯ</title>
+<script>
+  // ตั้งธีมก่อนวาดหน้า จะได้ไม่กะพริบ (ครั้งแรกตามเครื่อง)
+  try {
+    const t = localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- สี: มืด ---------- */
+  :root{
+    --bg:#131314; --side:#1b1c1d; --surface:#1e1f20; --surface-2:#2a2b2d; --hover:#282a2c;
+    --ink:#e3e3e3; --strong:#ffffff; --muted:#9aa0a6; --line:#2e3033; --head:#8ab4f8;
+    --accent-bg:#1f3760; --accent-ink:#d3e3fd; --warn:#f2b84b;
+    --shim-a:#232527; --shim-b:#3a4560;
+    --bar-shadow:0 10px 40px -12px rgba(0,0,0,.6);
+    --g1:#4b8df8; --g2:#9b72f2; --g3:#d96570;
+    --grad:linear-gradient(90deg,var(--g1),var(--g2) 55%,var(--g3));
+    --glow:30,64,175; --glow-k:.55;   /* แสงเรืองตรงกลาง (rgb) + ความเข้ม */
+    color-scheme:dark;
+  }
+  /* ---------- สี: สว่าง ---------- */
+  :root[data-theme="light"]{
+    --bg:#ffffff; --side:#f0f4f9; --surface:#f0f4f9; --surface-2:#e9eef6; --hover:#e4e9f1;
+    --ink:#1f1f1f; --strong:#000000; --muted:#5f6670; --line:#dde3ea; --head:#0b57d0;
+    --accent-bg:#d3e3fd; --accent-ink:#041e49; --warn:#b26a00;
+    --shim-a:#e9eef6; --shim-b:#c6d6f5;
+    --bar-shadow:0 8px 28px -14px rgba(30,60,120,.35);
+    --glow:120,165,255; --glow-k:.38;
+    color-scheme:light;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"IBM Plex Sans Thai",system-ui,sans-serif;background:var(--bg);color:var(--ink);
+    display:flex;overflow:hidden;transition:background .4s,color .4s}
+  button{font:inherit;color:inherit}
+
+  /* ---------- แถบซ้าย (จอแคบจะซ่อน) ---------- */
+  aside{width:280px;flex:none;background:var(--side);display:flex;flex-direction:column;padding:14px 10px;
+    overflow-y:auto;transition:background .4s}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+  .brand img{width:36px;height:36px;border-radius:50%;background:#fff;object-fit:contain;padding:2px;border:1px solid var(--line);flex:none}
+  .brand b{font-family:"Mitr";font-weight:400;font-size:1.05rem;display:block;line-height:1.2}
+  .brand small{font-size:.7rem;color:var(--muted);display:block;line-height:1.35}
+  .nav{all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:999px;
+    font-size:.88rem;transition:background .2s}
+  .nav:hover{background:var(--hover)}
+  .nav.on{background:var(--accent-bg);color:var(--accent-ink)}
+  .sec{font-size:.74rem;color:var(--muted);padding:18px 12px 6px}
+  .side-foot{margin-top:auto;padding:12px;font-size:.72rem;color:var(--muted);line-height:1.5;border-top:1px solid var(--line)}
+  .side-foot b{color:var(--ink);font-weight:500}
+
+  /* ---------- พื้นที่หลัก ---------- */
+  .stage{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;isolation:isolate}
+  .stage::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background:radial-gradient(42% 46% at 50% 48%,rgba(var(--glow),var(--glow-k)),rgba(var(--glow),calc(var(--glow-k)*.33)) 45%,transparent 72%);
+    transition:opacity .8s,background .8s}
+  body.v-thread .stage::before{opacity:.35}
+  body.state-listening{--glow:155,80,200}
+  :root[data-theme="light"] body.state-listening{--glow:220,140,240}
+  body.state-listening .stage::before{opacity:1;animation:breathe 1.4s ease-in-out infinite}
+  body.state-thinking{--glow:100,70,210}
+  :root[data-theme="light"] body.state-thinking{--glow:170,150,250}
+  body.state-thinking .stage::before{opacity:.8;animation:breathe 2.4s ease-in-out infinite}
+
+  .top{flex:none;display:flex;align-items:center;gap:8px;padding:14px 20px}
+  .top .brand-mini{display:none;align-items:center;gap:8px;font-family:"Mitr";font-size:.95rem}
+  .top .brand-mini img{width:30px;height:30px;border-radius:50%;background:#fff;object-fit:contain;padding:2px}
+  .led{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--muted);
+    background:var(--surface);padding:7px 13px;border-radius:999px;margin-right:auto;white-space:nowrap}
+  .led .d{width:8px;height:8px;border-radius:50%;background:#34a853;flex:none}
+  body.state-listening .led .d{background:var(--g3);animation:blink .7s infinite}
+  body.state-thinking .led .d{background:var(--g2);animation:blink 1s infinite}
+  body.state-answering .led .d{background:var(--g1);animation:blink 1.4s infinite}
+  body.state-error .led .d{background:#ea4335}
+  .seg{display:flex;background:var(--surface);border-radius:999px;padding:3px}
+  .seg button{all:unset;cursor:pointer;font-size:.76rem;font-weight:600;padding:6px 12px;border-radius:999px;color:var(--muted)}
+  .seg button.on{background:var(--accent-bg);color:var(--accent-ink)}
+  .icon-btn{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+    background:var(--surface);transition:background .2s;flex:none}
+  .icon-btn:hover{background:var(--hover)}
+  .icon-btn svg{width:19px;height:19px;fill:currentColor}
+  :root[data-theme="light"] .i-sun,:root:not([data-theme="light"]) .i-moon{display:none}
+  .pill{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.8rem;padding:8px 14px;
+    border-radius:999px;background:var(--accent-bg);color:var(--accent-ink);white-space:nowrap}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;scroll-behavior:smooth}
+  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:var(--surface-2);border-radius:9px}
+  .col{width:min(100% - 40px,760px);margin:0 auto}
+
+  /* ---------- หน้าแรก (กลางจอ) ---------- */
+  .welcome{margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 0 50px}
+  body.v-thread .welcome{display:none}
+  .hello{font-family:"Mitr";font-weight:400;font-size:clamp(1.6rem,3.2vw,2.4rem);line-height:1.3;animation:rise .6s both}
+  .hello em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .welcome .sub{color:var(--muted);font-size:.95rem;margin:8px 0 26px;animation:rise .6s .08s both}
+  .bar-slot{width:100%;animation:rise .6s .15s both}
+  .quick{margin-top:18px;animation:rise .6s .22s both}
+  .quick-label{font-size:.74rem;color:var(--muted);margin-bottom:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .chip{all:unset;cursor:pointer;font-size:.85rem;padding:9px 15px;border-radius:999px;background:var(--surface);
+    border:1px solid var(--line);transition:background .2s;white-space:nowrap}
+  .chip:hover{background:var(--hover)}
+  .chip:active{transform:scale(.97)}
+
+  /* ---------- ช่องถาม ---------- */
+  .composer{width:100%;display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:32px;
+    padding:8px 8px 8px 22px;min-height:64px;position:relative;box-shadow:var(--bar-shadow);transition:background .4s}
+  .composer input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:1rem;color:var(--ink)}
+  .composer input::placeholder{color:var(--muted)}
+  .ibtn{all:unset;cursor:pointer;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;flex:none;transition:background .2s}
+  .ibtn:hover{background:var(--hover)}
+  .ibtn svg{width:24px;height:24px;fill:currentColor}
+  .ibtn.send{display:none;color:var(--head)}
+  .composer.has-text .ibtn.send{display:grid}
+  .wave{display:none;flex:1;align-items:center;gap:4px;height:30px;min-width:0}
+  .wave i{width:4px;border-radius:3px;background:var(--grad);height:30%;animation:wave 1s ease-in-out infinite;flex:none}
+  .wave i:nth-child(2n){animation-delay:.15s}.wave i:nth-child(3n){animation-delay:.3s}.wave i:nth-child(5n){animation-delay:.45s}
+  .wave span{font-size:.95rem;color:var(--muted);margin-left:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.state-listening .composer input,body.state-listening .composer .send{display:none}
+  body.state-listening .wave{display:flex}
+  body.state-listening .composer::before{content:"";position:absolute;inset:-2px;border-radius:34px;z-index:-1;
+    background:conic-gradient(from var(--a),var(--g1),var(--g2),var(--g3),var(--g1));animation:spin-bg 2s linear infinite}
+  body.state-listening .ibtn.mic{background:var(--grad);color:#fff}
+  @property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+
+  /* ---------- บทสนทนา ---------- */
+  .chat{display:none;flex-direction:column;gap:26px;padding:10px 0 24px}
+  body.v-thread .chat{display:flex}
+  .msg.user{align-self:flex-end;max-width:75%;background:var(--surface-2);padding:12px 18px;
+    border-radius:24px 6px 24px 24px;font-size:.98rem;line-height:1.5;animation:rise .4s both;overflow-wrap:anywhere}
+  .mic-tag{display:block;font-size:.7rem;color:var(--muted);margin-bottom:2px}
+  .msg.bot{display:flex;gap:16px;align-items:flex-start;animation:rise .5s both}
+  .a-body{flex:1;min-width:0;font-size:1rem;line-height:1.75;padding-top:3px;overflow-wrap:anywhere}
+  .a-body.warn{border-left:3px solid var(--warn);padding-left:12px}
+  .a-body .md-p{margin-bottom:10px}
+  .a-body .md-h{font-weight:600;color:var(--head);margin:16px 0 4px}
+  .a-body .md-h:first-child{margin-top:0}
+  .a-body .md-list{padding-left:22px;margin-bottom:10px}
+  .a-body .md-list li{margin:4px 0}.a-body .md-list li::marker{color:var(--g2)}
+  .a-body b{font-weight:600;color:var(--strong)}
+  .tools{display:flex;gap:2px;margin:-4px 0 0 -8px}
+  .tools button{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+  .tools button:hover{background:var(--hover);color:var(--ink)}
+  .tools svg{width:19px;height:19px;fill:currentColor}
+  .caret{display:inline-block;width:.55em;height:.55em;margin-left:4px;border-radius:50%;vertical-align:middle;
+    background:var(--grad);animation:blink .8s infinite}
+  .map-thumb{display:block;width:100%;max-width:380px;border-radius:16px;margin:8px 0;cursor:zoom-in;border:1px solid var(--line)}
+
+  /* หน้าหุ่น + วงแหวนไล่สี */
+  .ava{position:relative;width:36px;height:36px;flex:none;border-radius:50%;display:grid;place-items:center}
+  .ava::before{content:"";position:absolute;inset:0;border-radius:50%;padding:2px;
+    background:conic-gradient(var(--g1),var(--g2),var(--g3),var(--g1));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .ava .face{width:30px;height:30px;border-radius:50%;background:#0b1626;display:flex;align-items:center;justify-content:center;gap:4px}
+  .ava .face i{width:5px;height:9px;border-radius:2px;background:#6fd3ff;box-shadow:0 0 6px #6fd3ff;animation:eye 4s infinite}
+  .typing .ava::before{animation:spin 1.1s linear infinite}
+  .shimmer{flex:1;padding-top:9px;display:flex;flex-direction:column;gap:10px}
+  .shimmer i{display:block;height:14px;border-radius:7px;
+    background:linear-gradient(90deg,var(--shim-a) 0%,var(--shim-b) 40%,var(--shim-a) 80%);background-size:300% 100%;animation:shim 1.6s linear infinite}
+  .shimmer i:nth-child(2){width:86%}.shimmer i:nth-child(3){width:58%}
+
+  /* ---------- ช่องถามล่างจอ (ตอนคุย) ---------- */
+  .dock{flex:none;padding:6px 0 16px;display:none}
+  body.v-thread .dock{display:block}
+  .chip-row{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
+  .chip-row::-webkit-scrollbar{display:none}
+  .chip-row .chip{font-size:.8rem;padding:7px 13px}
+  @media (max-height:600px){.chip-row,.hint{display:none}}   /* จอเตี้ย (เช่นจอ Pi 800×480) เก็บที่ให้คำตอบ */
+  .hint{text-align:center;font-size:.72rem;color:var(--muted);margin-top:10px}
+
+  /* ---------- รูปสถานที่ + เมนูที่เที่ยว/ของฝาก ---------- */
+  .place-photo{display:block;width:100%;max-width:420px;border-radius:16px;cursor:zoom-in;border:1px solid var(--line);object-fit:cover}
+  .photo-one{margin:8px 0}
+  .photo-one .place-photo,.place-card .place-photo{max-height:min(320px,45vh)}   /* รูปแนวตั้งไม่ให้สูงล้นจอเล็ก (แตะดูเต็มได้) */
+  .photo-one figcaption,.photo-row figcaption{font-size:.8rem;color:var(--muted);margin-top:4px}
+  .photo-row{display:flex;gap:10px;overflow-x:auto;margin:8px 0;padding-bottom:4px}
+  .photo-row figure{flex:none;width:170px}
+  .photo-row .place-photo{height:120px}
+  .menu-grid{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+  .menu-btn{all:unset;cursor:pointer;min-height:48px;box-sizing:border-box;padding:0 18px;border-radius:16px;display:flex;align-items:center;gap:8px;
+    background:var(--surface);border:1px solid var(--line);font-size:.95rem;transition:background .2s}
+  .menu-btn:hover{background:var(--hover)}
+  .menu-btn:active{transform:scale(.97)}
+  .menu-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:6px 0 4px}
+  .menu-item{all:unset;cursor:pointer;min-height:64px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:8px;
+    border-radius:16px;background:var(--surface);border:1px solid var(--line);transition:background .2s}
+  .menu-item:hover{background:var(--hover)}
+  .menu-item img,.menu-item .m-icon{width:64px;height:64px;border-radius:12px;flex:none;object-fit:cover}
+  .menu-item .m-icon{display:grid;place-items:center;font-size:1.8rem;background:var(--surface-2)}
+  .menu-item b{display:block;font-weight:500;line-height:1.35}
+  .menu-item small,.place-card small{color:var(--muted);font-size:.8rem}
+  .place-card{margin:6px 0 4px;max-width:420px}
+  .place-card .m-icon{width:100%;height:140px;border-radius:16px;display:grid;place-items:center;font-size:3rem;background:var(--surface-2)}
+  .place-card h3{font-family:"Mitr";font-weight:500;font-size:1.15rem;margin:10px 0 2px;color:var(--head)}
+  .place-card p{margin-top:6px}
+  .menu-nav{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .menu-nav .menu-btn{font-size:.85rem;color:var(--muted)}
+
+  /* ---------- lightbox ---------- */
+  #lightbox{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);
+    align-items:center;justify-content:center;cursor:zoom-out}
+  #lightbox.open{display:flex}
+  #lightbox img{max-width:95vw;max-height:90vh;border-radius:8px;object-fit:contain}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spin-bg{to{--a:360deg}}
+  @keyframes shim{from{background-position:100% 0}to{background-position:-200% 0}}
+  @keyframes wave{0%,100%{height:25%}50%{height:100%}}
+  @keyframes blink{50%{opacity:.3}}
+  @keyframes eye{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.15)}}
+  @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  @media (max-width:860px){aside{display:none}.top .brand-mini{display:flex}.led{margin-right:0}.top .spacer{flex:1}}
+  @media (max-width:560px){.col{width:calc(100% - 28px)}.top{padding:12px 14px;gap:6px}.top .brand-mini span,.pill span{display:none}
+    .msg.user{max-width:88%}.led{padding:7px 10px}}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body class="page-screen v-welcome state-idle">
+  <aside>
+    <div class="brand">
+      <img src="static/logo.jpg" alt="ตราวิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์">
+      <div><b data-t="brand">ผู้ช่วยท่าหลวงฯ</b><small data-t="college">วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</small></div>
+    </div>
+    <button class="nav on" data-action="newChat">✏️ <span data-t="newChat">เริ่มคุยใหม่</span></button>
+    <div class="sec" data-t="popular">คำถามยอดนิยม</div>
+    <div id="sideQs"></div>
+    <div class="side-foot"><b data-t="phone">โทร 0-3628-1295</b><br><span data-t="phoneNote">ข้อมูลไม่ครบ ติดต่อเจ้าหน้าที่ได้เลยค่ะ</span></div>
+  </aside>
+
+  <div class="stage">
+    <div class="top">
+      <div class="brand-mini"><img src="static/logo.jpg" alt=""><span data-t="brand">ผู้ช่วยท่าหลวงฯ</span></div>
+      <div class="spacer"></div>
+      <div class="led"><span class="d"></span><span class="led-text">พร้อมรับคำถาม</span></div>
+      <div class="seg" id="langSeg"><button data-lang="th" class="on">TH</button><button data-lang="en">EN</button></div>
+      <button class="icon-btn" id="themeBtn" title="สลับโหมดมืด/สว่าง">
+        <svg class="i-sun" viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24"><path d="M12.3 2a9.9 9.9 0 0 0 0 20c4.4 0 8.1-2.8 9.4-6.8A8 8 0 0 1 12.3 2z"/></svg>
+      </button>
+      <button class="pill" data-action="newChat">✏️ <span data-t="newShort">คุยใหม่</span></button>
+    </div>
+
+    <div class="scroll" id="scroll">
+      <section class="welcome col">
+        <div class="hello" data-t="hello">อยากรู้อะไรเกี่ยวกับ<em>ท่าหลวงฯ</em>ดี?</div>
+        <div class="sub" data-t="sub" id="welcomeSub">แตะไมค์เพื่อพูด หรือพิมพ์ถามได้เลยค่ะ 😊</div>
+        <div class="bar-slot" id="welcomeSlot">
+          <form class="composer" id="composer">
+            <input id="q" data-ph="placeholder" placeholder="ถามอะไรก็ได้เกี่ยวกับวิทยาลัย…" autocomplete="off">
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span data-t="listening">กำลังฟัง… พูดได้เลยค่ะ</span></div>
+            <button type="submit" class="ibtn send" data-title="send" title="ส่ง">
+              <svg viewBox="0 0 24 24"><path d="M3 20.5V14l8-2-8-2V3.5L22 12 3 20.5z"/></svg>
+            </button>
+            <button type="button" class="ibtn mic" id="mic" data-title="mic" title="กดเพื่อพูด">
+              <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
+            </button>
+          </form>
+        </div>
+        <div class="quick" id="quickQs">
+          <div class="quick-label" data-t="popularHint">คำถามยอดนิยม — แตะถามได้เลย</div>
+          <div class="chips">
+            <button type="button" class="chip" data-action="showMap">🗺️ <span data-t="cMap">แผนผังวิทยาลัย</span></button>
+            <button type="button" class="chip" data-q="เปิดสอนสาขาอะไรบ้าง" data-q-en="What programs does the college offer?">🎓 <span data-t="cPrograms">สาขาที่เปิดสอน</span></button>
+            <button type="button" class="chip" data-q="สมัครเรียนต้องมีคุณสมบัติอะไร" data-q-en="What are the admission requirements?">📝 <span data-t="cApply">คุณสมบัติผู้สมัคร</span></button>
+            <button type="button" class="chip" data-q="ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง" data-q-en="How can I contact the college?">📞 <span data-t="cContact">ช่องทางติดต่อ</span></button>
+            <button type="button" class="chip" data-menu="trips" data-q="สระบุรีมีที่เที่ยวที่ไหนบ้าง" data-q-en="What are the places to visit in Saraburi?">🏞️ <span data-t="cTrips">ที่เที่ยวสระบุรี</span></button>
+            <button type="button" class="chip" data-menu="souvenirs" data-q="ของฝากขึ้นชื่อของสระบุรีมีอะไรบ้าง" data-q-en="What are the famous souvenirs from Saraburi?">🛍️ <span data-t="cSouvenir">ของฝากสระบุรี</span></button>
+          </div>
+        </div>
+      </section>
+
+      <main class="chat col" id="chat"></main>
+    </div>
+
+    <div class="dock">
+      <div class="col">
+        <div class="chip-row" id="dockQs"></div>
+        <div id="dockSlot"></div>
+        <div class="hint" data-t="hint">หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะคะ</div>
+      </div>
+    </div>
+  </div>
+
+<div id="lightbox"><img src="" alt=""></div>
+<script src="demo.js"></script>
+<script src="static/screen.js"></script>
+</body>
+</html>
