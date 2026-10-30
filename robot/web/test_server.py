@@ -291,7 +291,7 @@ def test_ask_stream_sends_pieces_then_done(monkeypatch):
     monkeypatch.setattr(server, "wants_map", lambda q: False)
     r = c.post("/ask/stream", json={"question": "hi"})
     assert r.status_code == 200
-    assert _lines(r) == [{"t": "สวัส"}, {"t": "ดีค่ะ"}, {"done": True, "image": None}]
+    assert _lines(r) == [{"t": "สวัส"}, {"t": "ดีค่ะ"}, {"done": True, "image": None, "photos": []}]
     assert server.state["value"] == "answering"
 
 
@@ -302,7 +302,7 @@ def test_ask_stream_passes_language_and_map(monkeypatch):
     monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": seen.append(lang) or iter(["x"]))
     r = c.post("/ask/stream", json={"question": "Where is the canteen?", "lang": "en"})
     assert seen == ["en"]
-    assert _lines(r)[-1] == {"done": True, "image": "/static/map.jpg"}
+    assert _lines(r)[-1] == {"done": True, "image": "/static/map.jpg", "photos": []}
 
 
 def test_ask_stream_error_midway_keeps_text_and_reports(monkeypatch):
@@ -335,3 +335,70 @@ def test_friendly_error_messages():
     assert "quota" in server.friendly_error(quota, "en")
     assert "busy" in server.friendly_error(RuntimeError("503 UNAVAILABLE"), "en")
     assert server.friendly_error(RuntimeError("อื่น ๆ"), "th") == "อื่น ๆ"
+
+
+# ---------- รูปสถานที่ + เมนู ----------
+
+PHOTO = {"src": "/static/places/a.jpg", "name": "n", "caption": "c"}
+
+
+def test_ask_stream_done_has_photos_from_full_answer(monkeypatch):
+    # stream แยกชื่อเป็น 2 ท่อน → ต้องคำนวณจากคำตอบที่ต่อครบแล้ว
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": iter(["ไปน้ำตกเจ็ด", "สาวน้อยค่ะ"]))
+    monkeypatch.setattr(server, "wants_map", lambda q: False)
+    seen = []
+    monkeypatch.setattr(server, "photos_for", lambda q, a, d, lang="th": seen.append((q, a, lang)) or [PHOTO])
+    last = _lines(c.post("/ask/stream", json={"question": "เที่ยวไหนดี"}))[-1]
+    assert seen == [("เที่ยวไหนดี", "ไปน้ำตกเจ็ดสาวน้อยค่ะ", "th")]
+    assert last["photos"] == [PHOTO]
+
+
+def test_ask_includes_photos(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai", lambda q, c_, s, lang="th": "Jet Sao Noi")
+    monkeypatch.setattr(server, "wants_map", lambda q: False)
+    seen = []
+    monkeypatch.setattr(server, "photos_for", lambda q, a, d, lang="th": seen.append(lang) or [PHOTO])
+    d = c.post("/ask", json={"question": "where?", "lang": "en"}).get_json()
+    assert d["photos"] == [PHOTO]
+    assert seen == ["en"]
+
+
+def test_map_question_has_map_and_no_photos(monkeypatch):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai", lambda q, c_, s, lang="th": "อาคาร 7")
+    monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": iter(["อาคาร 7"]))
+    monkeypatch.setattr(server, "wants_map", lambda q: True)
+
+    def no_photos(*a, **k):
+        raise AssertionError("ไม่ควรหารูปที่เที่ยวตอนโชว์แผนผัง")
+
+    monkeypatch.setattr(server, "photos_for", no_photos)
+    d = c.post("/ask", json={"question": "โรงอาหารอยู่ไหน"}).get_json()
+    assert d["image"] == "/static/map.jpg" and d["photos"] == []
+    last = _lines(c.post("/ask/stream", json={"question": "โรงอาหารอยู่ไหน"}))[-1]
+    assert last == {"done": True, "image": "/static/map.jpg", "photos": []}
+
+
+def _no_ai(*a, **k):
+    raise AssertionError("เมนูห้ามเรียก AI")
+
+
+def test_menu_endpoint_returns_tree_without_ai(monkeypatch):
+    monkeypatch.setattr(server, "ask_ai", _no_ai)
+    monkeypatch.setattr(server, "ask_ai_stream", _no_ai)
+    r = make_client().get("/menu")
+    assert r.status_code == 200
+    m = r.get_json()
+    assert set(m) == {"trips", "souvenirs"}
+    assert [c["key"] for c in m["trips"]["categories"]] == list(server.saraburi_data["ท่องเที่ยวสระบุรี"])
+
+
+def test_menu_endpoint_with_empty_data(monkeypatch):
+    monkeypatch.setattr(server, "saraburi_data", {})
+    m = make_client().get("/menu").get_json()
+    assert m["trips"]["categories"] == [] and m["souvenirs"]["categories"] == []
