@@ -402,3 +402,15 @@ def test_menu_endpoint_with_empty_data(monkeypatch):
     monkeypatch.setattr(server, "saraburi_data", {})
     m = make_client().get("/menu").get_json()
     assert m["trips"]["categories"] == [] and m["souvenirs"]["categories"] == []
+
+
+def test_screen_trip_and_souvenir_chips_open_menu():
+    html = make_client().get("/screen").get_data(as_text=True)
+    assert 'data-menu="trips"' in html and 'data-menu="souvenirs"' in html
+    # ยังมี data-q ไว้เป็นทางสำรองตอน /menu โหลดไม่ได้
+    assert 'data-q="สระบุรีมีที่เที่ยวที่ไหนบ้าง"' in html
+
+
+def test_screen_js_uses_menu_and_photos():
+    js = make_client().get("/static/screen.js").get_data(as_text=True)
+    assert 'fetch("/menu")' in js and "photos" in js and "place-photo" in js
