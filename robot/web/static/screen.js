@@ -19,6 +19,8 @@ const T = {
     mapMsg: "นี่คือแผนผังวิทยาลัยค่ะ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
     sysErr: "ขออภัยค่ะ ระบบขัดข้อง ลองใหม่อีกครั้งนะคะ",
     noHear: "ไม่ได้ยินค่ะ ลองพูดใหม่ หรือพิมพ์คำถามดูนะคะ 🙏",
+    menuPick: "เลือกหมวดได้เลยค่ะ 👇", menuItems: "แตะดูรายละเอียดได้เลยค่ะ 👇",
+    back: "ย้อนกลับ", home: "หน้าแรก", districtPre: "อ.",
     states: { idle: "พร้อมรับคำถาม", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
   },
@@ -38,6 +40,8 @@ const T = {
     mapMsg: "Here's the campus map 🗺️ Tap the image to zoom in.",
     sysErr: "Sorry, something went wrong. Please try again.",
     noHear: "Sorry, I didn't catch that. Try speaking again or type your question 🙏",
+    menuPick: "Pick a category 👇", menuItems: "Tap one to see more 👇",
+    back: "Back", home: "Home", districtPre: "",
     states: { idle: "Ready", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
     speech: "en-US",
   },
@@ -170,12 +174,24 @@ function renderBot(m, text, opts = {}) {
   const img = opts.image ? `<img class="map-thumb" src="${opts.image}" alt="${t().mapAlt}">` : "";
   const tools = opts.warn ? "" :
     `<div class="tools"><button type="button" class="replay" title="${t().replay}">${REPLAY_ICON}</button></div>`;
-  box.innerHTML = html + img + tools;
+  const follow = nearBottom();
+  box.innerHTML = html + img + photosHtml(opts.photos) + tools;
+  // รูปโหลดเสร็จทีหลัง ความสูงเพิ่ม — เลื่อนตามถ้าผู้ใช้อยู่ท้ายแชท ไม่งั้นรูปโดนตัดขอบล่าง
+  if (follow) box.querySelectorAll("img").forEach((i) => i.addEventListener("load", scrollDown, { once: true }));
   const r = box.querySelector(".replay");
   if (r) {
     const say = plainForSpeech(text), sayLang = lang;
     r.addEventListener("click", () => { if (busy()) return; setState("answering"); speak(say, sayLang, () => setState("idle")); });
   }
+}
+
+// รูปสถานที่ใต้คำตอบ: รูปเดียวโชว์ใหญ่, หลายรูปเรียงเป็นแถวรูปเล็ก (แตะขยายได้)
+function photosHtml(photos) {
+  if (!photos || !photos.length) return "";
+  const fig = (p) => `<figure><img class="place-photo" src="${p.src}" alt="${escapeHtml(p.name)}">` +
+    `<figcaption>${escapeHtml(p.name)}${p.caption ? " · " + t().districtPre + escapeHtml(p.caption) : ""}</figcaption></figure>`;
+  return photos.length === 1 ? `<div class="photo-one">${fig(photos[0])}</div>`
+    : `<div class="photo-row">${photos.map(fig).join("")}</div>`;
 }
 
 // ---- พิมพ์คำตอบแบบค่อย ๆ ไหล: รับข้อความเข้ามาเป็นก้อน แต่โชว์ไล่ตามทีละนิดให้ลื่น ----
@@ -283,7 +299,7 @@ async function ask(question, opts = {}) {
       }
     }
     if (!tw) { fail(end && end.error); return; }          // พังก่อนได้สักคำ
-    tw.finish({ image: (end && end.image) || null }, () => {
+    tw.finish({ image: (end && end.image) || null, photos: (end && end.photos) || [] }, () => {
       if (stale()) return;
       if (end && end.error) addMsg("bot", t().sysErr, { warn: true });   // ขาดกลางทาง: ที่ได้แล้วยังอยู่
       speak(plainForSpeech(tw.text), askLang, () => setState("idle"));
@@ -339,16 +355,73 @@ function newChat() {
   setState("idle");
 }
 
+// ---- เมนูที่เที่ยว/ของฝาก: กดไล่ หมวด → รายชื่อ → รายละเอียด (ข้อมูลจาก /menu โหลดครั้งเดียว ไม่เรียก AI) ----
+let menuData = null;
+const loadMenu = () => fetch("/menu").then((r) => (r.ok ? r.json() : null)).then((d) => { menuData = d; }).catch(() => {});
+loadMenu();
+const pick = (o) => (o && (o[lang] || o.th)) || "";   // ชื่อตามภาษา (ไม่มีอังกฤษ → ไทย)
+const L = (o) => escapeHtml(pick(o));
+
+// ต่อเมนูเป็นข้อความในแชท: บับเบิลผู้ใช้ = ปุ่มที่แตะ (ข้อความดิบ addMsg escape ให้), บับเบิลหุ่น = ตัวเลือกชั้นถัดไป
+function menuStep(label, html, back) {
+  addMsg("user", label);
+  const m = document.createElement("div");
+  m.className = "msg bot";
+  m.innerHTML = AVA + '<div class="a-body">' + html + '<div class="menu-nav">' +
+    (back ? `<button type="button" class="menu-btn" ${back}>← ${t().back}</button>` : "") +
+    `<button type="button" class="menu-btn" data-action="newChat">🏠 ${t().home}</button></div></div>`;
+  chat.appendChild(m); scrollDown();
+  m.querySelectorAll("img").forEach((i) => i.addEventListener("load", scrollDown, { once: true }));
+}
+const district = (d) => (d ? `📍 ${t().districtPre}${escapeHtml(d)}` : "");
+
+function openMenu(b) {
+  const [sec, i, j] = (b.dataset.menu || b.dataset.menuCat || b.dataset.menuItem).split(":");
+  const s = menuData && menuData[sec];
+  if (!s || !s.categories.length) return false;
+  if (i === undefined) {
+    menuStep(pick(s.label), `<p class="md-p">${t().menuPick}</p><div class="menu-grid">` +
+      s.categories.map((c, k) => `<button type="button" class="menu-btn" data-menu-cat="${sec}:${k}">${c.icon} ${L(c.label)}</button>`).join("") +
+      "</div>");
+    return true;
+  }
+  const c = s.categories[i];
+  if (j === undefined) {
+    menuStep(`${c.icon} ${pick(c.label)}`, `<p class="md-p">${t().menuItems}</p><div class="menu-list">` +
+      c.items.map((it, k) => `<button type="button" class="menu-item" data-menu-item="${sec}:${i}:${k}">` +
+        (it.photo ? `<img src="${it.photo}" alt="">` : `<span class="m-icon">${c.icon}</span>`) +
+        `<span><b>${L(it.name)}</b><small>${district(it.district)}</small></span></button>`).join("") +
+      "</div>", `data-menu="${sec}"`);
+    return true;
+  }
+  const it = c.items[j];
+  menuStep(pick(it.name), '<div class="place-card">' +
+    (it.photo ? `<img class="place-photo" src="${it.photo}" alt="${L(it.name)}">` : `<div class="m-icon">${c.icon}</div>`) +
+    `<h3>${L(it.name)}</h3><small>${district(it.district)}</small>` +
+    (it.highlight ? `<p>${escapeHtml(it.highlight)}</p>` : "") + "</div>", `data-menu-cat="${sec}:${i}"`);
+  return true;
+}
+
 document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-q], [data-action]");
+  const b = e.target.closest("[data-q], [data-action], [data-menu], [data-menu-cat], [data-menu-item]");
   if (!b) return;
   const action = b.dataset.action;
   if (action === "newChat") { newChat(); return; }
   if (busy()) return;   // กันแตะรัวระหว่างหุ่นกำลังคิด/พูด
+  if (b.dataset.menu || b.dataset.menuCat || b.dataset.menuItem) {
+    // เมนูยังไม่มา (โหลดไม่ทัน/เคยพัง) → ลองโหลดใหม่ก่อน ถ้ายังไม่ได้จริง ๆ ชิปค่อยตกไปถาม AI แบบเดิม
+    (menuData ? Promise.resolve() : loadMenu()).then(() => {
+      if (!openMenu(b) && b.dataset.q && !busy()) askChip(b);
+    });
+    return;
+  }
   if (action === "showMap") { showMap(); return; }
+  askChip(b);
+});
+function askChip(b) {
   const q = (lang === "en" && b.dataset.qEn) || b.dataset.q || b.textContent.trim();
   ask(q, { voice: false });   // data-q = คำถามเต็ม, ป้ายบนปุ่มย่อให้สั้น
-});
+}
 
 document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("click", () => applyLang(b.dataset.lang)));
 
@@ -356,7 +429,7 @@ document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("
 const lightbox = $("lightbox");
 lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 chat.addEventListener("click", (e) => {
-  if (e.target.classList.contains("map-thumb")) {
+  if (e.target.classList.contains("map-thumb") || e.target.classList.contains("place-photo")) {
     lightbox.querySelector("img").src = e.target.src;
     lightbox.classList.add("open");
   }

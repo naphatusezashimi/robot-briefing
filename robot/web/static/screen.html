@@ -183,6 +183,34 @@
   @media (max-height:600px){.chip-row,.hint{display:none}}   /* จอเตี้ย (เช่นจอ Pi 800×480) เก็บที่ให้คำตอบ */
   .hint{text-align:center;font-size:.72rem;color:var(--muted);margin-top:10px}
 
+  /* ---------- รูปสถานที่ + เมนูที่เที่ยว/ของฝาก ---------- */
+  .place-photo{display:block;width:100%;max-width:420px;border-radius:16px;cursor:zoom-in;border:1px solid var(--line);object-fit:cover}
+  .photo-one{margin:8px 0}
+  .photo-one .place-photo,.place-card .place-photo{max-height:min(320px,45vh)}   /* รูปแนวตั้งไม่ให้สูงล้นจอเล็ก (แตะดูเต็มได้) */
+  .photo-one figcaption,.photo-row figcaption{font-size:.8rem;color:var(--muted);margin-top:4px}
+  .photo-row{display:flex;gap:10px;overflow-x:auto;margin:8px 0;padding-bottom:4px}
+  .photo-row figure{flex:none;width:170px}
+  .photo-row .place-photo{height:120px}
+  .menu-grid{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+  .menu-btn{all:unset;cursor:pointer;min-height:48px;box-sizing:border-box;padding:0 18px;border-radius:16px;display:flex;align-items:center;gap:8px;
+    background:var(--surface);border:1px solid var(--line);font-size:.95rem;transition:background .2s}
+  .menu-btn:hover{background:var(--hover)}
+  .menu-btn:active{transform:scale(.97)}
+  .menu-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:6px 0 4px}
+  .menu-item{all:unset;cursor:pointer;min-height:64px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:8px;
+    border-radius:16px;background:var(--surface);border:1px solid var(--line);transition:background .2s}
+  .menu-item:hover{background:var(--hover)}
+  .menu-item img,.menu-item .m-icon{width:64px;height:64px;border-radius:12px;flex:none;object-fit:cover}
+  .menu-item .m-icon{display:grid;place-items:center;font-size:1.8rem;background:var(--surface-2)}
+  .menu-item b{display:block;font-weight:500;line-height:1.35}
+  .menu-item small,.place-card small{color:var(--muted);font-size:.8rem}
+  .place-card{margin:6px 0 4px;max-width:420px}
+  .place-card .m-icon{width:100%;height:140px;border-radius:16px;display:grid;place-items:center;font-size:3rem;background:var(--surface-2)}
+  .place-card h3{font-family:"Mitr";font-weight:500;font-size:1.15rem;margin:10px 0 2px;color:var(--head)}
+  .place-card p{margin-top:6px}
+  .menu-nav{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .menu-nav .menu-btn{font-size:.85rem;color:var(--muted)}
+
   /* ---------- lightbox ---------- */
   #lightbox{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);
     align-items:center;justify-content:center;cursor:zoom-out}
@@ -251,8 +279,8 @@
             <button type="button" class="chip" data-q="เปิดสอนสาขาอะไรบ้าง" data-q-en="What programs does the college offer?">🎓 <span data-t="cPrograms">สาขาที่เปิดสอน</span></button>
             <button type="button" class="chip" data-q="สมัครเรียนต้องมีคุณสมบัติอะไร" data-q-en="What are the admission requirements?">📝 <span data-t="cApply">คุณสมบัติผู้สมัคร</span></button>
             <button type="button" class="chip" data-q="ติดต่อวิทยาลัยได้ช่องทางไหนบ้าง" data-q-en="How can I contact the college?">📞 <span data-t="cContact">ช่องทางติดต่อ</span></button>
-            <button type="button" class="chip" data-q="สระบุรีมีที่เที่ยวที่ไหนบ้าง" data-q-en="What are the places to visit in Saraburi?">🏞️ <span data-t="cTrips">ที่เที่ยวสระบุรี</span></button>
-            <button type="button" class="chip" data-q="ของฝากขึ้นชื่อของสระบุรีมีอะไรบ้าง" data-q-en="What are the famous souvenirs from Saraburi?">🛍️ <span data-t="cSouvenir">ของฝากสระบุรี</span></button>
+            <button type="button" class="chip" data-menu="trips" data-q="สระบุรีมีที่เที่ยวที่ไหนบ้าง" data-q-en="What are the places to visit in Saraburi?">🏞️ <span data-t="cTrips">ที่เที่ยวสระบุรี</span></button>
+            <button type="button" class="chip" data-menu="souvenirs" data-q="ของฝากขึ้นชื่อของสระบุรีมีอะไรบ้าง" data-q-en="What are the famous souvenirs from Saraburi?">🛍️ <span data-t="cSouvenir">ของฝากสระบุรี</span></button>
           </div>
         </div>
       </section>

@@ -23,6 +23,7 @@ import config                                                   # noqa: E402
 from database import load_college_data, load_saraburi_data      # noqa: E402
 from ai import ask_ai, ask_ai_stream                            # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
+from places import photos_for, menu_tree                       # noqa: E402
 import json                                                    # noqa: E402
 import queue                                                   # noqa: E402
 from gpio_btn import GpioButton                                # noqa: E402
@@ -111,9 +112,11 @@ def ask():
     try:
         answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
         state["value"] = "answering"
-        result = {"answer": answer}
+        result = {"answer": answer, "photos": []}
         if wants_map(question):
-            result["image"] = "/static/map.jpg"
+            result["image"] = "/static/map.jpg"   # ถามทางในวิทยาลัย → แผนผัง ไม่ต้องหารูปที่เที่ยว
+        else:
+            result["photos"] = photos_for(question, answer, saraburi_data, lang=lang)
         return jsonify(**result)
     except Exception as e:
         state["value"] = "error"
@@ -145,7 +148,7 @@ def friendly_error(e: Exception, lang: str) -> str:
 @app.post("/ask/stream")
 def ask_stream():
     """เหมือน /ask แต่ทยอยส่งคำตอบ — ส่งเป็น JSON บรรทัดละก้อน (NDJSON):
-    {"t": "ข้อความท่อนใหม่"} ... แล้วจบด้วย {"done": true, "image": ...} หรือ {"error": "..."}"""
+    {"t": "ข้อความท่อนใหม่"} ... แล้วจบด้วย {"done": true, "image": ..., "photos": [...]} หรือ {"error": "..."}"""
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
     lang = data.get("lang") if data.get("lang") in LANGS else "th"
@@ -158,12 +161,16 @@ def ask_stream():
 
     def generate():
         line = lambda obj: json.dumps(obj, ensure_ascii=False) + "\n"   # noqa: E731
+        pieces = []
         try:
             for piece in ask_ai_stream(question, college_data, saraburi_data, lang=lang):
                 state["value"] = "answering"
+                pieces.append(piece)
                 yield line({"t": piece})
             state["value"] = "answering"
-            yield line({"done": True, "image": image})
+            # หารูปจากคำตอบที่ต่อครบแล้ว (ชื่อสถานที่อาจถูกตัดคร่อมสองท่อน)
+            photos = [] if image else photos_for(question, "".join(pieces), saraburi_data, lang=lang)
+            yield line({"done": True, "image": image, "photos": photos})
         except Exception as e:
             state["value"] = "error"
             print(f"[ask/stream] {e}")   # ข้อความเต็มไว้ดูในหน้าต่างเซิร์ฟเวอร์
@@ -171,6 +178,12 @@ def ask_stream():
 
     return Response(generate(), mimetype="application/x-ndjson",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/menu")
+def menu():
+    """โครงเมนูที่เที่ยว/ของฝาก — หน้าจอโหลดครั้งเดียว ไม่เรียก AI"""
+    return jsonify(menu_tree(saraburi_data))
 
 
 def main():
