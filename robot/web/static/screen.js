@@ -357,7 +357,8 @@ function newChat() {
 
 // ---- เมนูที่เที่ยว/ของฝาก: กดไล่ หมวด → รายชื่อ → รายละเอียด (ข้อมูลจาก /menu โหลดครั้งเดียว ไม่เรียก AI) ----
 let menuData = null;
-fetch("/menu").then((r) => (r.ok ? r.json() : null)).then((d) => { menuData = d; }).catch(() => {});
+const loadMenu = () => fetch("/menu").then((r) => (r.ok ? r.json() : null)).then((d) => { menuData = d; }).catch(() => {});
+loadMenu();
 const pick = (o) => (o && (o[lang] || o.th)) || "";   // ชื่อตามภาษา (ไม่มีอังกฤษ → ไทย)
 const L = (o) => escapeHtml(pick(o));
 
@@ -408,12 +409,19 @@ document.addEventListener("click", (e) => {
   if (action === "newChat") { newChat(); return; }
   if (busy()) return;   // กันแตะรัวระหว่างหุ่นกำลังคิด/พูด
   if (b.dataset.menu || b.dataset.menuCat || b.dataset.menuItem) {
-    if (openMenu(b) || !b.dataset.q) return;   // /menu โหลดไม่ได้ → ชิปตกไปถาม AI แบบเดิม
+    // เมนูยังไม่มา (โหลดไม่ทัน/เคยพัง) → ลองโหลดใหม่ก่อน ถ้ายังไม่ได้จริง ๆ ชิปค่อยตกไปถาม AI แบบเดิม
+    (menuData ? Promise.resolve() : loadMenu()).then(() => {
+      if (!openMenu(b) && b.dataset.q && !busy()) askChip(b);
+    });
+    return;
   }
   if (action === "showMap") { showMap(); return; }
+  askChip(b);
+});
+function askChip(b) {
   const q = (lang === "en" && b.dataset.qEn) || b.dataset.q || b.textContent.trim();
   ask(q, { voice: false });   // data-q = คำถามเต็ม, ป้ายบนปุ่มย่อให้สั้น
-});
+}
 
 document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("click", () => applyLang(b.dataset.lang)));
 

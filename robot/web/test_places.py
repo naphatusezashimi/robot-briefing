@@ -96,3 +96,11 @@ def test_menu_tree_empty_data(DIR):
     assert menu_tree({}, places_dir=DIR) == {
         "trips": {"label": {"th": "ที่เที่ยวสระบุรี", "en": "Places to visit"}, "categories": []},
         "souvenirs": {"label": {"th": "ของฝากสระบุรี", "en": "Souvenirs"}, "categories": []}}
+
+
+def test_refusal_answer_shows_no_photo_of_other_place(DIR):
+    # ถามที่ที่ไม่มีในข้อมูล → AI ปฏิเสธแล้วแนะนำที่อื่น: ห้ามขึ้นรูปที่อื่นใต้คำถามนั้น
+    th = "ขออภัย ยังไม่มีข้อมูลในส่วนนี้ค่ะ แต่สระบุรีมีน้ำตกเจ็ดสาวน้อยนะคะ"
+    en = "Sorry, I don't have that information yet. Saraburi has Jet Sao Noi Waterfall though."
+    assert photos_for("น้ำตกเอราวัณอยู่ที่ไหน", th, DATA, places_dir=DIR) == []
+    assert photos_for("Where is Erawan waterfall?", en, DATA, lang="en", places_dir=DIR) == []

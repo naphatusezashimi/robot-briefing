@@ -6,6 +6,7 @@ from pathlib import Path
 
 PLACES_DIR = Path(__file__).resolve().parent / "static" / "places"
 MAX_PHOTOS = 3
+_REFUSALS = ("ยังไม่มีข้อมูล", "don't have that information")   # ประโยคปฏิเสธตามกฎใน ai.py
 
 _SECTIONS = {   # คีย์ในเมนู → (ส่วนในไฟล์ข้อมูล, ป้ายชื่อ)
     "trips": ("ท่องเที่ยวสระบุรี", {"th": "ที่เที่ยวสระบุรี", "en": "Places to visit"}),
@@ -76,7 +77,10 @@ def photos_for(question: str, answer: str, saraburi_data: dict, lang: str = "th"
                places_dir: Path = PLACES_DIR) -> list[dict]:
     """รูปที่จะต่อท้ายคำตอบ: ชื่อในคำถามก่อน ถ้าไม่มีค่อยใช้ชื่อในคำตอบ — เฉพาะที่มีไฟล์รูปจริง"""
     entries = _entries(saraburi_data)
-    found = _find(question, entries) or _find(answer, entries)
+    found = _find(question, entries)
+    # คำตอบที่ปฏิเสธ (ไม่มีข้อมูลที่ถาม) แล้วแนะนำที่อื่น — รูปที่อื่นจะทำให้เข้าใจผิดว่าเป็นที่ที่ถาม
+    if not found and not any(r in answer.lower() for r in _REFUSALS):
+        found = _find(answer, entries)
     out = []
     for e in found:
         src = _photo_src(e, places_dir)
