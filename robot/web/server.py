@@ -28,8 +28,13 @@ import json                                                    # noqa: E402
 import queue                                                   # noqa: E402
 from gpio_btn import GpioButton                                # noqa: E402
 from arm import Arm                                            # noqa: E402
+from stats import Stats                                        # noqa: E402
+from announce import load_announcements, due_announcements    # noqa: E402
+from datetime import datetime                                  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+VIDEO_DIR = STATIC_DIR / "videos"          # วิดีโอโหมดรอ — วางไฟล์ .mp4/.webm ในนี้
+VIDEO_EXTS = (".mp4", ".webm", ".ogv")
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
@@ -40,6 +45,8 @@ LANGS = ("th", "en")                    # ภาษาที่จอเนื�
 button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
 arm = Arm()
+stats = Stats(ROBOT_DIR / config.STATS_DB_PATH)
+_now = datetime.now   # แยกไว้ให้เทสต์แกล้งเปลี่ยนเวลาได้
 
 
 def request_greet():
@@ -116,6 +123,7 @@ def ask():
     if problem:
         state["value"] = "error"
         return jsonify(error=problem), 500
+    stats.log_question(question, lang)
     state["value"] = "thinking"
     try:
         answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
@@ -164,6 +172,7 @@ def ask_stream():
     if problem:
         state["value"] = "error"
         return jsonify(error=problem), 500
+    stats.log_question(question, lang)
     state["value"] = "thinking"
     image = "/static/map.jpg" if wants_map(question) else None
 
@@ -194,10 +203,68 @@ def greet():
     return jsonify(ok=True, waving=arm.wave())
 
 
+@app.post("/rate")
+def rate():
+    """ให้ดาว 1–5 กับคำตอบ (จอเนื้อหาส่งมาพร้อมคำถามของคำตอบนั้น)"""
+    data = request.get_json(silent=True) or {}
+    lang = data.get("lang") if data.get("lang") in LANGS else "th"
+    try:
+        stats.add_rating(data.get("stars"), data.get("question"), lang)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    return jsonify(ok=True)
+
+
+@app.get("/stats")
+def stats_page():
+    """หน้าสถิติ (เปิดจากคอม/มือถือ เช่น http://<ip ของ Pi>:5000/stats)"""
+    return send_from_directory(STATIC_DIR, "stats.html")
+
+
+@app.get("/stats.json")
+def stats_json():
+    return jsonify(stats.summary(now=_now()))
+
+
+@app.get("/attract")
+def attract():
+    """รายชื่อวิดีโอโหมดรอ + ว่างกี่วินาทีถึงเริ่มเล่น"""
+    videos = []
+    if VIDEO_DIR.is_dir():
+        videos = [f"/static/videos/{f.name}" for f in sorted(VIDEO_DIR.iterdir())
+                  if f.is_file() and f.suffix.lower() in VIDEO_EXTS]
+    return jsonify(videos=videos, after=config.IDLE_VIDEO_SECONDS)
+
+
+@app.get("/announcements/due")
+def announcements_due():
+    """ประกาศที่ถึงเวลาในนาทีนี้ — จอเนื้อหาถามทุก ~15 วินาที แล้วจำ id ที่พูดไปแล้ว"""
+    items = load_announcements(ROBOT_DIR / config.ANNOUNCEMENTS_PATH)
+    return jsonify(due=due_announcements(items, _now()))
+
+
 @app.get("/menu")
 def menu():
     """โครงเมนูที่เที่ยว/ของฝาก — หน้าจอโหลดครั้งเดียว ไม่เรียก AI"""
     return jsonify(menu_tree(saraburi_data))
+
+
+def lan_ips():
+    """IP ของเครื่องนี้ในวง Wi-Fi/LAN (ไว้บอกว่าเครื่องอื่นต้องพิมพ์อะไร)"""
+    import socket
+    ips = set()
+    try:   # วิธีนี้ไม่ส่งข้อมูลออกจริง แค่ถามระบบว่าจะออกเน็ตทางการ์ดไหน
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127."))
 
 
 def main():
@@ -206,7 +273,11 @@ def main():
         print("!" * 70)
         print("⚠  " + problem)
         print("!" * 70)
-    print(f"เปิดหุ่นที่  http://{config.WEB_HOST}:{config.WEB_PORT}/screen  และ  /face")
+    port = config.WEB_PORT
+    print(f"เปิดหุ่นที่  http://127.0.0.1:{port}/screen  และ  /face")
+    if config.WEB_HOST == "0.0.0.0":
+        for ip in lan_ips():
+            print(f"มือถือ/คอมเครื่องอื่น (Wi-Fi เดียวกัน) ดูสถิติที่  http://{ip}:{port}/stats")
     app.run(host=config.WEB_HOST, port=config.WEB_PORT, threaded=True)
 
 

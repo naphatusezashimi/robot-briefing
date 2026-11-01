@@ -22,6 +22,9 @@ const T = {
     menuPick: "เลือกหมวดได้เลยค่ะ 👇", menuItems: "แตะดูรายละเอียดได้เลยค่ะ 👇",
     back: "ย้อนกลับ", home: "หน้าแรก", districtPre: "อ.",
     greet: "สวัสดีค่ะ หนูชื่อทีแอลบอท มีอะไรให้ช่วยไหมคะ",
+    rateAsk: "คำตอบนี้ช่วยได้ไหมคะ?", rateThanks: "ขอบคุณที่ให้คะแนนค่ะ 🙏", starUnit: "ดาว",
+    attractSub: "สวัสดีค่ะ หนูชื่อทีแอลบอท ผู้ช่วยตอบคำถามของวิทยาลัย", attractTap: "👆 แตะจอเพื่อถามหุ่นยนต์",
+    announceTag: "ประกาศ",
     states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีค่ะ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
   },
@@ -44,6 +47,9 @@ const T = {
     menuPick: "Pick a category 👇", menuItems: "Tap one to see more 👇",
     back: "Back", home: "Home", districtPre: "",
     greet: "Hi! I'm TL-Bot. How can I help you today?",
+    rateAsk: "Was this answer helpful?", rateThanks: "Thanks for rating! 🙏", starUnit: "stars",
+    attractSub: "Hi! I'm TL-Bot, the college's question assistant.", attractTap: "👆 Tap the screen to ask the robot",
+    announceTag: "Announcement",
     states: { idle: "Ready", greeting: "Hello! 👋", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
     speech: "en-US",
   },
@@ -64,8 +70,9 @@ let state = "idle";
 const t = () => T[lang];
 
 // ---- สถานะ: อัปเดต UI ตัวเอง + แจ้งเซิร์ฟเวอร์ (ให้จอใบหน้า sync) ----
+let idleSince = Date.now();   // เวลาที่มีความเคลื่อนไหวล่าสุด (แตะจอ/เปลี่ยนสถานะ) — ใช้นับเข้าโหมดรอ
 function setState(s) {
-  state = s;
+  state = s; idleSince = Date.now();
   body.className = body.className.replace(/\bstate-\S+/, "state-" + s);
   if (ledText) ledText.textContent = t().states[s] || s;
   fetch("/state", {
@@ -177,7 +184,7 @@ function renderBot(m, text, opts = {}) {
   const tools = opts.warn ? "" :
     `<div class="tools"><button type="button" class="replay" title="${t().replay}">${REPLAY_ICON}</button></div>`;
   const follow = nearBottom();
-  box.innerHTML = html + img + photosHtml(opts.photos) + tools;
+  box.innerHTML = html + img + photosHtml(opts.photos) + tools + (opts.rateQ ? rateHtml(opts.rateQ) : "");
   // รูปโหลดเสร็จทีหลัง ความสูงเพิ่ม — เลื่อนตามถ้าผู้ใช้อยู่ท้ายแชท ไม่งั้นรูปโดนตัดขอบล่าง
   if (follow) box.querySelectorAll("img").forEach((i) => i.addEventListener("load", scrollDown, { once: true }));
   const r = box.querySelector(".replay");
@@ -185,6 +192,25 @@ function renderBot(m, text, opts = {}) {
     const say = plainForSpeech(text), sayLang = lang;
     r.addEventListener("click", () => { if (busy()) return; setState("answering"); speak(say, sayLang, () => setState("idle")); });
   }
+}
+
+// ---- ให้ดาว 1–5 ใต้คำตอบจาก AI (เก็บที่เซิร์ฟเวอร์ไว้ดูหน้า /stats) ----
+function rateHtml(question) {
+  const stars = [5, 4, 3, 2, 1].map((n) =>   // เรียงกลับ เพราะ CSS ใช้ row-reverse
+    `<button type="button" data-stars="${n}" title="${n} ${t().starUnit}" aria-label="${n} ${t().starUnit}">★</button>`).join("");
+  return `<div class="rate" data-question="${escapeHtml(question).replace(/"/g, "&quot;")}" data-lang="${lang}">` +
+    `<span>${t().rateAsk}</span><div class="stars">${stars}</div></div>`;
+}
+function sendRating(btn) {
+  const row = btn.closest(".rate");
+  if (!row || row.classList.contains("done")) return;
+  row.classList.add("done");
+  btn.classList.add("on");
+  fetch("/rate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stars: Number(btn.dataset.stars), question: row.dataset.question, lang: row.dataset.lang }),
+  }).catch(() => {});
+  row.querySelector("span").outerHTML = `<span class="thanks">${t().rateThanks}</span>`;
 }
 
 // รูปสถานที่ใต้คำตอบ: รูปเดียวโชว์ใหญ่, หลายรูปเรียงเป็นแถวรูปเล็ก (แตะขยายได้)
@@ -301,7 +327,8 @@ async function ask(question, opts = {}) {
       }
     }
     if (!tw) { fail(end && end.error); return; }          // พังก่อนได้สักคำ
-    tw.finish({ image: (end && end.image) || null, photos: (end && end.photos) || [] }, () => {
+    const ok = !(end && end.error);   // ตอบไม่จบ ไม่ต้องขอดาว
+    tw.finish({ image: (end && end.image) || null, photos: (end && end.photos) || [], rateQ: ok ? question : "" }, () => {
       if (stale()) return;
       if (end && end.error) addMsg("bot", t().sysErr, { warn: true });   // ขาดกลางทาง: ที่ได้แล้วยังอยู่
       speak(plainForSpeech(tw.text), askLang, () => { lastActive = Date.now(); setState("idle"); });
@@ -461,6 +488,8 @@ document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("
 const lightbox = $("lightbox");
 lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 chat.addEventListener("click", (e) => {
+  const star = e.target.closest("[data-stars]");
+  if (star) { sendRating(star); return; }
   if (e.target.classList.contains("map-thumb") || e.target.classList.contains("place-photo")) {
     lightbox.querySelector("img").src = e.target.src;
     lightbox.classList.add("open");
@@ -473,6 +502,94 @@ applyLang(lang);   // ตั้งภาษา + ส่งสถานะ idle �
 // ---- GPIO button via SSE ----
 const evtSrc = new EventSource("/events");
 evtSrc.onmessage = (e) => {
-  if (e.data === "mic-start" && !listening && !busy()) { onActivity(); toggleMic(); }
-  if (e.data === "greet") greet();   // เซนเซอร์เจอคนเดินมา
+  if (e.data === "mic-start" && !listening && !busy()) { stopAttract(); onActivity(); toggleMic(); }
+  if (e.data === "greet") { stopAttract(); greet(); }   // เซนเซอร์เจอคนเดินมา
 };
+
+// ---- โหมดรอ: ไม่มีใครใช้นาน → เปิดวิดีโอวนเต็มจอ, แตะจอ/เซนเซอร์เจอคน → กลับหน้าถามตอบ (เริ่มคุยใหม่) ----
+// วิดีโอมาจาก /attract (ไฟล์ใน web/static/videos/) ไม่มีวิดีโอ = โชว์ตราวิทยาลัยแทน
+const attractEl = $("attract"), video = attractEl.querySelector("video");
+let attractCfg = { videos: [], after: 90 }, attractOn = false, vidIdx = 0, vidFails = 0;
+fetch("/attract").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) attractCfg = d; }).catch(() => {});
+
+function playVideo() {
+  const list = attractCfg.videos || [];
+  attractEl.classList.toggle("no-video", !list.length || vidFails >= list.length);
+  if (attractEl.classList.contains("no-video")) return;
+  video.src = list[vidIdx % list.length];
+  video.loop = list.length === 1;
+  video.muted = false;
+  // เบราว์เซอร์บางตัวห้ามเล่นมีเสียงเอง (บน Pi ตั้ง kiosk ให้เล่นได้แล้ว) → ลองแบบเงียบแทน
+  video.play().catch(() => { video.muted = true; video.play().catch(() => {}); });
+}
+video.addEventListener("ended", () => { vidIdx++; playVideo(); });
+video.addEventListener("error", () => { if (!attractOn) return; vidFails++; vidIdx++; playVideo(); });
+video.addEventListener("playing", () => { vidFails = 0; });
+
+function startAttract() {
+  if (attractOn) return;
+  newChat();   // คนต่อไปเริ่มหน้าใหม่ ไม่เห็นบทสนทนาของคนก่อน
+  attractOn = true; vidFails = 0;
+  attractEl.classList.add("open");
+  playVideo();
+}
+function stopAttract() {
+  if (!attractOn) return;
+  attractOn = false;
+  attractEl.classList.remove("open");
+  video.pause();
+  idleSince = Date.now();
+}
+// แตะจอ: ปิดวิดีโอ (onActivity ที่ดักไว้ข้างบนจะทักทายให้เอง ถ้าเงียบมานานพอ)
+attractEl.addEventListener("click", stopAttract);
+document.addEventListener("pointerdown", () => { idleSince = Date.now(); }, true);
+document.addEventListener("keydown", () => { idleSince = Date.now(); }, true);
+setInterval(() => {
+  if (attractOn || state !== "idle" || listening || greeting || announcing) return;
+  if (Date.now() - idleSince > (attractCfg.after || 90) * 1000) startAttract();
+}, 2000);
+
+// ---- ประกาศตามเวลา: ถามเซิร์ฟเวอร์ทุก 15 วิ ว่ามีประกาศถึงเวลาไหม (ตั้งใน robot/announcements.json) ----
+// ถ้าหุ่นกำลังคุยกับคนอยู่ รอให้ตอบจบก่อนค่อยประกาศ (รอเกิน 5 นาทีแล้วข้ามไป)
+const ANN_STALE_MS = 5 * 60 * 1000, ANN_MIN_MS = 6000;
+const annEl = $("announce");
+let annDone;
+try { annDone = new Set(JSON.parse(store.get("annDone") || "[]")); } catch (e) { annDone = new Set(); }
+const annQueue = [];
+let announcing = false;
+
+function pollAnnouncements() {
+  fetch("/announcements/due").then((r) => (r.ok ? r.json() : null)).then((d) => {
+    for (const a of (d && d.due) || []) {
+      if (annDone.has(a.id) || annQueue.some((q) => q.id === a.id)) continue;
+      annQueue.push({ ...a, at: Date.now() });
+    }
+    runAnnouncements();
+  }).catch(() => {});
+}
+function runAnnouncements() {
+  if (announcing || !annQueue.length) return;
+  if (busy() || listening || greeting) { setTimeout(runAnnouncements, 3000); return; }
+  const a = annQueue.shift();
+  annDone.add(a.id);
+  store.set("annDone", JSON.stringify([...annDone].slice(-50)));
+  if (Date.now() - a.at > ANN_STALE_MS) { runAnnouncements(); return; }
+  const useEn = lang === "en" && a.text_en;
+  const text = useEn ? a.text_en : a.text;
+  announcing = true;
+  if (attractOn) video.pause();
+  $("announceText").textContent = text;
+  annEl.classList.add("open");
+  setState("answering");   // หน้าหุ่นขยับปากตอนประกาศ
+  const spoken = new Promise((res) => speak(plainForSpeech(text), useEn ? "en" : "th", res));
+  const minTime = new Promise((res) => setTimeout(res, ANN_MIN_MS));
+  Promise.all([spoken, minTime]).then(() => {
+    annEl.classList.remove("open");
+    announcing = false;
+    setState("idle");
+    if (attractOn) video.play().catch(() => {});
+    runAnnouncements();
+  });
+}
+pollAnnouncements();
+setInterval(pollAnnouncements, 15000);

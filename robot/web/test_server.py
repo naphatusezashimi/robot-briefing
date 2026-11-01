@@ -2,7 +2,18 @@
 เทสต์เซิร์ฟเวอร์เว็บ — Flask test client + mock ask_ai (ไม่ยิง API จริง)
 รันจากโฟลเดอร์ robot/:  & $py -m pytest web/test_server.py -v
 """
+import pytest
+
 import server  # web/ ถูกใส่ใน sys.path โดย pytest (prepend import mode)
+from stats import Stats
+
+
+@pytest.fixture(autouse=True)
+def temp_stats(tmp_path, monkeypatch):
+    """ทุกเทสต์ใช้ฐานสถิติชั่วคราว ไม่เขียนลง robot/stats.db ตัวจริง"""
+    st = Stats(tmp_path / "stats.db")
+    monkeypatch.setattr(server, "stats", st)
+    return st
 
 
 def make_client():
@@ -471,3 +482,73 @@ def test_screen_greets_as_female_tl_bot():
     js = c.get("/static/screen.js").data.decode("utf-8")
     assert "หนูชื่อทีแอลบอท" in js
     assert "/greet" in js
+
+
+# ---- สถิติ: เก็บคำถาม + ให้ดาว ----
+def test_ask_stream_logs_question(monkeypatch, temp_stats):
+    c = make_client()
+    set_valid_key(monkeypatch)
+    monkeypatch.setattr(server, "ask_ai_stream", lambda q, c_, s, lang="th": iter(["ok"]))
+    monkeypatch.setattr(server, "wants_map", lambda q: False)
+    c.post("/ask/stream", json={"question": "สาขาอะไรบ้าง"}).get_data()
+    assert temp_stats.summary()["top"] == [{"question": "สาขาอะไรบ้าง", "count": 1}]
+
+
+def test_rate_saves_stars(temp_stats):
+    c = make_client()
+    r = c.post("/rate", json={"stars": 4, "question": "ติดต่อยังไง", "lang": "th"})
+    assert r.status_code == 200
+    s = temp_stats.summary()
+    assert s["ratings_total"] == 1 and s["average"] == 4
+
+
+def test_rate_rejects_bad_stars(temp_stats):
+    c = make_client()
+    for bad in (0, 6, "5", None):
+        assert c.post("/rate", json={"stars": bad, "question": "q"}).status_code == 400
+    assert temp_stats.summary()["ratings_total"] == 0
+
+
+def test_stats_page_and_json(temp_stats):
+    c = make_client()
+    temp_stats.add_rating(5, "q", "th")
+    assert c.get("/stats").status_code == 200
+    assert c.get("/stats.json").get_json()["ratings_total"] == 1
+
+
+def test_screen_has_star_rating():
+    js = make_client().get("/static/screen.js").data.decode("utf-8")
+    assert "/rate" in js
+
+
+# ---- โหมดรอ: วิดีโอวน ----
+def test_attract_lists_videos(tmp_path, monkeypatch):
+    vids = tmp_path / "videos"
+    vids.mkdir()
+    (vids / "b.mp4").write_bytes(b"x")
+    (vids / "a.webm").write_bytes(b"x")
+    (vids / "readme.txt").write_text("ไม่ใช่วิดีโอ", encoding="utf-8")
+    monkeypatch.setattr(server, "VIDEO_DIR", vids)
+    monkeypatch.setattr(server.config, "IDLE_VIDEO_SECONDS", 90)
+    d = make_client().get("/attract").get_json()
+    assert d["videos"] == ["/static/videos/a.webm", "/static/videos/b.mp4"]
+    assert d["after"] == 90
+
+
+def test_attract_without_video_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "VIDEO_DIR", tmp_path / "ไม่มี")
+    assert make_client().get("/attract").get_json()["videos"] == []
+
+
+# ---- ประกาศตามเวลา ----
+def test_announcements_due(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime
+    p = tmp_path / "announcements.json"
+    p.write_text(json.dumps([{"เวลา": "08:00", "ข้อความ": "สวัสดีตอนเช้าค่ะ"}], ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(server.config, "ANNOUNCEMENTS_PATH", str(p))
+    monkeypatch.setattr(server, "_now", lambda: datetime(2026, 11, 2, 8, 0, 5))
+    d = make_client().get("/announcements/due").get_json()
+    assert [a["text"] for a in d["due"]] == ["สวัสดีตอนเช้าค่ะ"]
+    monkeypatch.setattr(server, "_now", lambda: datetime(2026, 11, 2, 9, 0, 5))
+    assert make_client().get("/announcements/due").get_json()["due"] == []
