@@ -52,7 +52,7 @@ class Arm:
             try:
                 driver = _ServoKitDriver()
             except Exception as e:   # ยังไม่ได้เสียบ PCA9685 / ยังไม่เปิด I2C / ยังไม่ลงไลบรารี
-                print(f"[arm] ⚠ หาบอร์ด PCA9685 ไม่เจอ ({e}) — ทำงานต่อแบบไม่ขยับแขน")
+                print(f"[arm] ⚠ หาบอร์ด PCA9685 ไม่เจอ ({e}) — ทำงานต่อแบบไม่ขยับแขน", flush=True)
                 self._sim = True
         if driver is None:
             driver = _PrintDriver()
@@ -89,7 +89,7 @@ class Arm:
                 if pause:
                     self._sleep(pause)
         except Exception as e:   # เซอร์โว/I2C มีปัญหา — ไม่ให้เซิร์ฟเวอร์ล่ม
-            print(f"[arm] ขยับแขนไม่ได้: {e}")
+            print(f"[arm] ขยับแขนไม่ได้: {e}", flush=True)
         finally:
             self.busy = False
 
@@ -100,7 +100,7 @@ class Arm:
                 return False
             self.busy = True
         if self._sim:
-            print("[arm] 👋 โบกมือ (โหมดจำลอง)")
+            print("[arm] 👋 โบกมือ (โหมดจำลอง)", flush=True)
         if self._background:
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()
