@@ -249,13 +249,35 @@ def menu():
     return jsonify(menu_tree(saraburi_data))
 
 
+def lan_ips():
+    """IP ของเครื่องนี้ในวง Wi-Fi/LAN (ไว้บอกว่าเครื่องอื่นต้องพิมพ์อะไร)"""
+    import socket
+    ips = set()
+    try:   # วิธีนี้ไม่ส่งข้อมูลออกจริง แค่ถามระบบว่าจะออกเน็ตทางการ์ดไหน
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127."))
+
+
 def main():
     problem = missing_key_error()
     if problem:
         print("!" * 70)
         print("⚠  " + problem)
         print("!" * 70)
-    print(f"เปิดหุ่นที่  http://{config.WEB_HOST}:{config.WEB_PORT}/screen  และ  /face")
+    port = config.WEB_PORT
+    print(f"เปิดหุ่นที่  http://127.0.0.1:{port}/screen  และ  /face")
+    if config.WEB_HOST == "0.0.0.0":
+        for ip in lan_ips():
+            print(f"มือถือ/คอมเครื่องอื่น (Wi-Fi เดียวกัน) ดูสถิติที่  http://{ip}:{port}/stats")
     app.run(host=config.WEB_HOST, port=config.WEB_PORT, threaded=True)
 
 
