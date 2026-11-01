@@ -12,7 +12,10 @@
   window.fetch = (url, opts) => {
     const u = String(url);
     if (u === "/menu") return realFetch("menu.json");
-    if (u === "/state") return Promise.resolve(new Response("{}", { headers: { "Content-Type": "application/json" } }));
+    const json = (o) => Promise.resolve(new Response(JSON.stringify(o), { headers: { "Content-Type": "application/json" } }));
+    if (u === "/state" || u === "/rate") return json({});
+    if (u === "/attract") return json({ videos: [], after: 90 });     // โหมดรอโชว์ตราวิทยาลัย (ไม่มีวิดีโอบนเว็บ)
+    if (u === "/announcements/due") return json({ due: [] });
     if (u === "/ask/stream") {
       let lang = "th";
       try { lang = JSON.parse(opts.body).lang === "en" ? "en" : "th"; } catch (e) {}

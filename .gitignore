@@ -24,3 +24,10 @@ env/
 Thumbs.db
 desktop.ini
 site/
+
+# สถิติของหุ่น (คำถาม + ดาว) — ข้อมูลใช้งานจริง ไม่ขึ้น git
+robot/stats.db
+
+# วิดีโอโหมดรอ (ไฟล์ใหญ่) — ก๊อปไปวางบน Pi เอง
+robot/web/static/videos/*
+!robot/web/static/videos/README.md

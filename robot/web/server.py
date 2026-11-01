@@ -28,8 +28,13 @@ import json                                                    # noqa: E402
 import queue                                                   # noqa: E402
 from gpio_btn import GpioButton                                # noqa: E402
 from arm import Arm                                            # noqa: E402
+from stats import Stats                                        # noqa: E402
+from announce import load_announcements, due_announcements    # noqa: E402
+from datetime import datetime                                  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+VIDEO_DIR = STATIC_DIR / "videos"          # วิดีโอโหมดรอ — วางไฟล์ .mp4/.webm ในนี้
+VIDEO_EXTS = (".mp4", ".webm", ".ogv")
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
@@ -40,6 +45,8 @@ LANGS = ("th", "en")                    # ภาษาที่จอเนื�
 button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
 arm = Arm()
+stats = Stats(ROBOT_DIR / config.STATS_DB_PATH)
+_now = datetime.now   # แยกไว้ให้เทสต์แกล้งเปลี่ยนเวลาได้
 
 
 def request_greet():
@@ -116,6 +123,7 @@ def ask():
     if problem:
         state["value"] = "error"
         return jsonify(error=problem), 500
+    stats.log_question(question, lang)
     state["value"] = "thinking"
     try:
         answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
@@ -164,6 +172,7 @@ def ask_stream():
     if problem:
         state["value"] = "error"
         return jsonify(error=problem), 500
+    stats.log_question(question, lang)
     state["value"] = "thinking"
     image = "/static/map.jpg" if wants_map(question) else None
 
@@ -192,6 +201,46 @@ def ask_stream():
 def greet():
     """โบกมือ 1 รอบ (จอเนื้อหาเป็นคนเรียก พร้อมกับพูดคำทักทายเอง)"""
     return jsonify(ok=True, waving=arm.wave())
+
+
+@app.post("/rate")
+def rate():
+    """ให้ดาว 1–5 กับคำตอบ (จอเนื้อหาส่งมาพร้อมคำถามของคำตอบนั้น)"""
+    data = request.get_json(silent=True) or {}
+    lang = data.get("lang") if data.get("lang") in LANGS else "th"
+    try:
+        stats.add_rating(data.get("stars"), data.get("question"), lang)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    return jsonify(ok=True)
+
+
+@app.get("/stats")
+def stats_page():
+    """หน้าสถิติ (เปิดจากคอม/มือถือ เช่น http://<ip ของ Pi>:5000/stats)"""
+    return send_from_directory(STATIC_DIR, "stats.html")
+
+
+@app.get("/stats.json")
+def stats_json():
+    return jsonify(stats.summary(now=_now()))
+
+
+@app.get("/attract")
+def attract():
+    """รายชื่อวิดีโอโหมดรอ + ว่างกี่วินาทีถึงเริ่มเล่น"""
+    videos = []
+    if VIDEO_DIR.is_dir():
+        videos = [f"/static/videos/{f.name}" for f in sorted(VIDEO_DIR.iterdir())
+                  if f.is_file() and f.suffix.lower() in VIDEO_EXTS]
+    return jsonify(videos=videos, after=config.IDLE_VIDEO_SECONDS)
+
+
+@app.get("/announcements/due")
+def announcements_due():
+    """ประกาศที่ถึงเวลาในนาทีนี้ — จอเนื้อหาถามทุก ~15 วินาที แล้วจำ id ที่พูดไปแล้ว"""
+    items = load_announcements(ROBOT_DIR / config.ANNOUNCEMENTS_PATH)
+    return jsonify(due=due_announcements(items, _now()))
 
 
 @app.get("/menu")
