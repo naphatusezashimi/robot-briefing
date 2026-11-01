@@ -28,12 +28,17 @@ def build(out: Path) -> None:
     for f in ("logo.jpg", "map.jpg"):
         shutil.copy2(STATIC / f, out / "static" / f)
     shutil.copytree(STATIC / "places", out / "static" / "places", dirs_exist_ok=True)
-    (out / "static" / "screen.js").write_text(_relative((STATIC / "screen.js").read_text(encoding="utf-8")), encoding="utf-8")
+    for js in ("screen.js", "face.js"):
+        (out / "static" / js).write_text(_relative((STATIC / js).read_text(encoding="utf-8")), encoding="utf-8")
 
-    html = _relative((STATIC / "screen.html").read_text(encoding="utf-8"))
-    html = html.replace('<script src="static/screen.js"></script>',
-                        '<script src="demo.js"></script>\n<script src="static/screen.js"></script>')
-    (out / "index.html").write_text(html, encoding="utf-8")
+    # 3 หน้า: จอแชท (index.html), หน้าหุ่น, สถิติ — ทุกหน้าโหลด demo.js ก่อน (แทน fetch ไปเซิร์ฟเวอร์)
+    for src, dest, first_script in (("screen.html", "index.html", '<script src="static/screen.js"></script>'),
+                                    ("face.html", "face.html", '<script src="static/face.js"></script>'),
+                                    ("stats.html", "stats.html", "<script>")):
+        html = _relative((STATIC / src).read_text(encoding="utf-8"))
+        assert first_script in html, f"{src}: หา {first_script} ไม่เจอ"
+        html = html.replace(first_script, '<script src="demo.js"></script>\n' + first_script, 1)
+        (out / dest).write_text(html, encoding="utf-8")
     shutil.copy2(WEB_DIR / "demo" / "demo.js", out / "demo.js")
 
     data = json.loads(SARABURI_DATA.read_text(encoding="utf-8"))
