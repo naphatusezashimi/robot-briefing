@@ -27,17 +27,25 @@ from places import photos_for, menu_tree                       # noqa: E402
 import json                                                    # noqa: E402
 import queue                                                   # noqa: E402
 from gpio_btn import GpioButton                                # noqa: E402
+from arm import Arm                                            # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 
 college_data = load_college_data()
 saraburi_data = load_saraburi_data()
-state = {"value": "idle", "lang": "th"}   # value: idle | listening | thinking | answering | error
+state = {"value": "idle", "lang": "th"}   # value: idle | greeting | listening | thinking | answering | error
 LANGS = ("th", "en")                    # ภาษาที่จอเนื้อหาเลือก — จอใบหน้าใช้ตามนี้
 
 button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
+arm = Arm()
+
+
+def request_greet():
+    """ให้หุ่นทักทาย (โบก + หน้ายิ้ม + พูด) — จอเนื้อหาได้สัญญาณ แล้วเรียก /greet กลับมาโบกแขน
+    เซนเซอร์จับคน (เช่น อัลตราโซนิก) ในอนาคตให้เรียกฟังก์ชันนี้"""
+    button_queue.put("greet")
 
 
 def _make_sse_stream():
@@ -178,6 +186,12 @@ def ask_stream():
 
     return Response(generate(), mimetype="application/x-ndjson",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/greet")
+def greet():
+    """โบกมือ 1 รอบ (จอเนื้อหาเป็นคนเรียก พร้อมกับพูดคำทักทายเอง)"""
+    return jsonify(ok=True, waving=arm.wave())
 
 
 @app.get("/menu")

@@ -124,7 +124,16 @@
   body.state-error .eye.right{transform:rotate(15deg)}
   body.state-error .mouth{width:84px;height:40px;border:8px solid var(--accent);border-bottom:0;border-radius:96px 96px 0 0}
 
+  /* ทักทาย (ชมพูส้ม) — ตายิ้มโค้ง ^ ^ ปากยิ้มกว้าง หน้าเอียงไปมาเหมือนโบกมือ */
+  body.state-greeting{--accent:#FF9EB5;--glow:#FF6F91}
+  body.state-greeting .face{animation:float 6s ease-in-out infinite, hello 1s ease-in-out 3}
+  body.state-greeting .eye-ball{height:58px;background:none;border:16px solid var(--accent);border-bottom:0;
+    border-radius:90px 90px 0 0;box-shadow:0 -6px 22px var(--glow);animation:none}
+  body.state-greeting .eye-ball::after{display:none}
+  body.state-greeting .mouth{width:104px;height:54px;border-radius:0 0 104px 104px;background:var(--accent)}
+
   /* ---------- animations ---------- */
+  @keyframes hello{0%,100%{rotate:0deg}25%{rotate:-6deg}75%{rotate:6deg}}
   @keyframes blink{0%,93%,100%{transform:scaleY(1)}96.5%{transform:scaleY(.08)}}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
   @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.6);opacity:.5}}

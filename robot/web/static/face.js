@@ -2,11 +2,11 @@
 // ภาษาของป้ายสถานะตามที่จอเนื้อหาเลือก (เซิร์ฟเวอร์ส่ง lang มากับ /state)
 const LABELS = {
   th: {
-    idle: "พร้อมรับคำถาม", listening: "กำลังฟัง…", thinking: "กำลังคิด…",
+    idle: "พร้อมรับคำถาม", greeting: "สวัสดีค่ะ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…",
     answering: "กำลังตอบ", error: "ขออภัย เกิดข้อผิดพลาด",
   },
   en: {
-    idle: "Ready for your question", listening: "Listening…", thinking: "Thinking…",
+    idle: "Ready for your question", greeting: "Hello! 👋", listening: "Listening…", thinking: "Thinking…",
     answering: "Answering", error: "Sorry, something went wrong",
   },
 };
