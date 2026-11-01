@@ -11,6 +11,7 @@ from build_demo import build
 def test_demo_has_all_files(tmp_path):
     build(tmp_path)
     for f in ("index.html", "demo.js", "menu.json", ".nojekyll",
+              "face.html", "stats.html", "static/face.js",
               "static/screen.js", "static/logo.jpg", "static/map.jpg", "static/places/CREDITS.md"):
         assert (tmp_path / f).is_file(), f
 
@@ -18,7 +19,7 @@ def test_demo_has_all_files(tmp_path):
 def test_demo_uses_relative_paths(tmp_path):
     # GitHub Pages เปิดที่ /robot-briefing/ — path ที่ขึ้นต้นด้วย /static/ จะหาไฟล์ไม่เจอ
     build(tmp_path)
-    for f in ("index.html", "static/screen.js", "menu.json"):
+    for f in ("index.html", "face.html", "stats.html", "static/screen.js", "static/face.js", "menu.json"):
         assert not re.search(r"[\"'`(]/static/", (tmp_path / f).read_text(encoding="utf-8")), f
 
 
@@ -43,3 +44,11 @@ def test_demo_never_contains_api_key(tmp_path):
         if p.is_file() and p.suffix in (".html", ".js", ".json", ".md"):
             text = p.read_text(encoding="utf-8")
             assert "GEMINI_API_KEY" not in text and not re.search(r"AIza[0-9A-Za-z_-]{20,}", text), p.name
+
+
+def test_demo_shim_loads_first_on_face_and_stats(tmp_path):
+    build(tmp_path)
+    face = (tmp_path / "face.html").read_text(encoding="utf-8")
+    assert face.index('src="demo.js"') < face.index('src="static/face.js"')
+    stats = (tmp_path / "stats.html").read_text(encoding="utf-8")
+    assert stats.index('src="demo.js"') < stats.index("fetch(\"/stats.json\")")
