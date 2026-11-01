@@ -414,3 +414,53 @@ def test_screen_trip_and_souvenir_chips_open_menu():
 def test_screen_js_uses_menu_and_photos():
     js = make_client().get("/static/screen.js").get_data(as_text=True)
     assert 'fetch("/menu")' in js and "photos" in js and "place-photo" in js
+
+
+# ---- ทักทาย: แขนโบก + หน้าหุ่น + คำทัก ----
+class FakeArm:
+    def __init__(self, ok=True):
+        self.calls = 0
+        self.ok = ok
+
+    def wave(self):
+        self.calls += 1
+        return self.ok
+
+
+def test_greet_waves_arm(monkeypatch):
+    c = make_client()
+    arm = FakeArm()
+    monkeypatch.setattr(server, "arm", arm)
+    r = c.post("/greet")
+    assert r.status_code == 200
+    assert r.get_json() == {"ok": True, "waving": True}
+    assert arm.calls == 1
+
+
+def test_greet_while_arm_busy_reports_not_waving(monkeypatch):
+    c = make_client()
+    monkeypatch.setattr(server, "arm", FakeArm(ok=False))
+    assert c.post("/greet").get_json()["waving"] is False
+
+
+def test_request_greet_pushes_event_to_screen():
+    """เซนเซอร์ (เช่น อัลตราโซนิก) เรียก request_greet() → จอได้สัญญาณ greet ทาง /events"""
+    while not server.button_queue.empty():
+        server.button_queue.get_nowait()
+    server.request_greet()
+    assert server.button_queue.get_nowait() == "greet"
+
+
+def test_face_has_greeting_mood():
+    c = make_client()
+    html = c.get("/face").data.decode("utf-8")
+    assert "state-greeting" in html
+    js = c.get("/static/face.js").data.decode("utf-8")
+    assert "greeting" in js
+
+
+def test_screen_greets_as_female_tl_bot():
+    c = make_client()
+    js = c.get("/static/screen.js").data.decode("utf-8")
+    assert "หนูชื่อทีแอลบอท" in js
+    assert "/greet" in js

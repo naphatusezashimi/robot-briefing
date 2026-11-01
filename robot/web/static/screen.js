@@ -21,7 +21,8 @@ const T = {
     noHear: "ไม่ได้ยินค่ะ ลองพูดใหม่ หรือพิมพ์คำถามดูนะคะ 🙏",
     menuPick: "เลือกหมวดได้เลยค่ะ 👇", menuItems: "แตะดูรายละเอียดได้เลยค่ะ 👇",
     back: "ย้อนกลับ", home: "หน้าแรก", districtPre: "อ.",
-    states: { idle: "พร้อมรับคำถาม", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
+    greet: "สวัสดีค่ะ หนูชื่อทีแอลบอท มีอะไรให้ช่วยไหมคะ",
+    states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีค่ะ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
   },
   en: {
@@ -42,7 +43,8 @@ const T = {
     noHear: "Sorry, I didn't catch that. Try speaking again or type your question 🙏",
     menuPick: "Pick a category 👇", menuItems: "Tap one to see more 👇",
     back: "Back", home: "Home", districtPre: "",
-    states: { idle: "Ready", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
+    greet: "Hi! I'm TL-Bot. How can I help you today?",
+    states: { idle: "Ready", greeting: "Hello! 👋", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
     speech: "en-US",
   },
 };
@@ -302,12 +304,41 @@ async function ask(question, opts = {}) {
     tw.finish({ image: (end && end.image) || null, photos: (end && end.photos) || [] }, () => {
       if (stale()) return;
       if (end && end.error) addMsg("bot", t().sysErr, { warn: true });   // ขาดกลางทาง: ที่ได้แล้วยังอยู่
-      speak(plainForSpeech(tw.text), askLang, () => setState("idle"));
+      speak(plainForSpeech(tw.text), askLang, () => { lastActive = Date.now(); setState("idle"); });
     });
   } catch (e) {
     fail();
   }
 }
+
+// ---- ทักทาย: แขนโบก (เซิร์ฟเวอร์) + หน้าหุ่นยิ้ม (state greeting) + พูดคำทักทาย ----
+// ทักเมื่อไม่มีใครแตะจอนานเกิน GREET_IDLE_MS แล้วมีคนแตะครั้งแรก หรือเมื่อเซนเซอร์ส่ง "greet" มาทาง /events
+const GREET_IDLE_MS = 60 * 1000;   // ให้ตรงกับ GREET_IDLE_SECONDS ใน config.py
+const GREET_MIN_MS = 3000;         // หน้ายิ้มค้างอย่างน้อยเท่ากับเวลาแขนโบก
+let lastActive = -Infinity;        // เปิดเครื่องมา คนแรกที่แตะได้รับการทักเลย
+let greeting = null;               // Promise ระหว่างกำลังทัก (ไมค์รอให้ทักเสร็จก่อน ไม่งั้นได้ยินเสียงตัวเอง)
+
+function greet() {
+  if (greeting || busy() || listening) return;
+  lastActive = Date.now();
+  setState("greeting");
+  fetch("/greet", { method: "POST" }).catch(() => {});
+  const spoken = new Promise((res) => speak(t().greet, lang, res));
+  const minTime = new Promise((res) => setTimeout(res, GREET_MIN_MS));
+  greeting = Promise.all([spoken, minTime]).then(() => {
+    greeting = null;
+    lastActive = Date.now();
+    if (state === "greeting") setState("idle");
+  });
+}
+function onActivity(e) {
+  const quiet = Date.now() - lastActive > GREET_IDLE_MS;
+  lastActive = Date.now();
+  if (e && e.target.closest && e.target.closest('[data-action="newChat"]')) return;
+  if (quiet) greet();
+}
+document.addEventListener("pointerdown", onActivity, true);
+document.addEventListener("keydown", onActivity, true);
 
 // ---- ไมค์ (STT) ----
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -316,6 +347,7 @@ function toggleMic() {
   if (!recog) return;
   if (listening) { recog.stop(); listening = false; setState("idle"); return; }
   if (busy()) return;
+  if (greeting) { greeting.then(toggleMic); return; }   // ทักให้จบก่อน แล้วเริ่มฟังเอง
   window.speechSynthesis && window.speechSynthesis.cancel();
   setState("listening"); listening = true;
   try { recog.start(); } catch (e) { listening = false; setState("idle"); }
@@ -441,5 +473,6 @@ applyLang(lang);   // ตั้งภาษา + ส่งสถานะ idle �
 // ---- GPIO button via SSE ----
 const evtSrc = new EventSource("/events");
 evtSrc.onmessage = (e) => {
-  if (e.data === "mic-start" && !listening && !busy()) toggleMic();
+  if (e.data === "mic-start" && !listening && !busy()) { onActivity(); toggleMic(); }
+  if (e.data === "greet") greet();   // เซนเซอร์เจอคนเดินมา
 };
