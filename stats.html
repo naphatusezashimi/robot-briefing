@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!--
+  หน้าสถิติของหุ่น TL-Bot — เปิดจากคอม/มือถือที่อยู่ในวงเน็ตเดียวกับ Pi:  http://<ip ของ Pi>:5000/stats
+  (ถ้า WEB_HOST ใน config.py เป็น 127.0.0.1 จะเปิดได้เฉพาะบน Pi เอง ต้องเปลี่ยนเป็น 0.0.0.0 ก่อน)
+  ข้อมูลมาจาก /stats.json รีเฟรชเองทุก 30 วินาที
+-->
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สถิติ TL-Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#131314; --surface:#1e1f20; --surface-2:#2a2b2d; --ink:#e3e3e3; --strong:#fff; --muted:#9aa0a6;
+    --line:#2e3033; --head:#8ab4f8; --star:#f5b301; --bar:#4b8df8; --low:#f28b82; color-scheme:dark;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fb; --surface:#fff; --surface-2:#eef2f7; --ink:#1f1f1f; --strong:#000; --muted:#5f6670;
+      --line:#dde3ea; --head:#0b57d0; --star:#d99a00; --bar:#0b57d0; --low:#c5221f; color-scheme:light;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"IBM Plex Sans Thai",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;
+    padding:28px 16px 48px}
+  .wrap{max-width:960px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:24px;flex-wrap:wrap}
+  header img{width:48px;height:48px;border-radius:50%;background:#fff;padding:2px;object-fit:contain}
+  h1{font-family:"Mitr";font-weight:500;font-size:1.5rem;line-height:1.2}
+  header small{display:block;color:var(--muted);font-size:.8rem}
+  .updated{margin-left:auto;font-size:.78rem;color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px}
+  .kpi .label{font-size:.82rem;color:var(--muted)}
+  .kpi .value{font-family:"Mitr";font-size:2.2rem;font-weight:500;color:var(--strong);line-height:1.2;font-variant-numeric:tabular-nums}
+  .kpi .value .unit{font-size:1rem;color:var(--muted);font-weight:400;margin-left:4px}
+  .kpi .sub{font-size:.8rem;color:var(--muted)}
+  .kpi .stars{color:var(--star);letter-spacing:2px;font-size:1.05rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+  h2{font-family:"Mitr";font-weight:500;font-size:1.05rem;margin-bottom:4px;color:var(--head)}
+  .hint{font-size:.78rem;color:var(--muted);margin-bottom:14px}
+  .dist{display:grid;grid-template-columns:auto 1fr auto;gap:8px 12px;align-items:center;font-variant-numeric:tabular-nums}
+  .dist .s{color:var(--star);white-space:nowrap}
+  .track{height:14px;border-radius:7px;background:var(--surface-2);overflow:hidden}
+  .fill{height:100%;border-radius:7px;background:var(--star);min-width:0;transition:width .6s}
+  .dist .n{color:var(--muted);font-size:.85rem;min-width:2.5em;text-align:right}
+  ol,ul{list-style:none}
+  .rows li{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
+  .rows li:first-child{border-top:0}
+  .rows .q{overflow-wrap:anywhere}
+  .rows .bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+  .rows .bar i{display:block;height:100%;background:var(--bar);border-radius:3px}
+  .rows .c{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rows .low{color:var(--low);white-space:nowrap}
+  .rows small{grid-column:1/-1;color:var(--muted);font-size:.75rem;margin-top:-4px}
+  .empty{color:var(--muted);font-size:.9rem;padding:8px 0}
+  .err{display:none;margin-bottom:12px;padding:12px 16px;border-radius:14px;border:1px solid var(--low);color:var(--low)}
+  .err.show{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="static/logo.jpg" alt="ตราวิทยาลัย">
+    <div><h1>สถิติการใช้งาน TL-Bot</h1><small>วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</small></div>
+    <div class="updated" id="updated">กำลังโหลด…</div>
+  </header>
+
+  <div class="err" id="err">โหลดข้อมูลไม่ได้ — เซิร์ฟเวอร์หุ่นเปิดอยู่ไหม? จะลองใหม่เองใน 30 วินาที</div>
+
+  <section class="kpis">
+    <div class="card kpi"><div class="label">คำถามวันนี้</div><div class="value" id="qToday">–</div><div class="sub" id="qTotal">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">คะแนนเฉลี่ย</div><div class="value" id="avg">–</div><div class="stars" id="avgStars">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">จำนวนคนให้ดาว</div><div class="value" id="rTotal">–</div><div class="sub" id="rToday">&nbsp;</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>คะแนนที่ได้</h2>
+      <p class="hint">คนให้ดาวกี่คนในแต่ละระดับ</p>
+      <div class="dist" id="dist"></div>
+    </div>
+    <div class="card">
+      <h2>คำถามที่ถามบ่อย</h2>
+      <p class="hint">10 อันดับแรก (นับเฉพาะข้อความที่ตรงกันทุกตัว)</p>
+      <ol class="rows" id="top"></ol>
+    </div>
+    <div class="card">
+      <h2>คำตอบที่ได้ 1–2 ดาว</h2>
+      <p class="hint">ข้อพวกนี้ควรเติมข้อมูลใน college_data.json / saraburi_data.json</p>
+      <ul class="rows" id="low"></ul>
+    </div>
+  </section>
+</div>
+
+<script src="demo.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nf = new Intl.NumberFormat("th-TH");
+const starText = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+
+function render(d) {
+  $("qToday").innerHTML = nf.format(d.questions_today) + '<span class="unit">ข้อ</span>';
+  $("qTotal").textContent = "ทั้งหมด " + nf.format(d.questions_total) + " ข้อ";
+  $("avg").innerHTML = d.average == null ? "–" : d.average.toFixed(2) + '<span class="unit">/ 5</span>';
+  $("avgStars").textContent = d.average == null ? "ยังไม่มีคนให้ดาว" : starText(Math.round(d.average));
+  $("rTotal").innerHTML = nf.format(d.ratings_total) + '<span class="unit">คน</span>';
+  $("rToday").textContent = "วันนี้ " + nf.format(d.ratings_today) + " คน";
+
+  const max = Math.max(1, ...Object.values(d.distribution));
+  $("dist").innerHTML = [5, 4, 3, 2, 1].map((n) => {
+    const c = d.distribution[n] || 0;
+    return `<span class="s">${n} ★</span><div class="track"><div class="fill" style="width:${(c / max) * 100}%"></div></div><span class="n">${nf.format(c)}</span>`;
+  }).join("");
+
+  const topMax = Math.max(1, ...d.top.map((x) => x.count));
+  $("top").innerHTML = d.top.length ? d.top.map((x) =>
+    `<li><span class="q">${esc(x.question)}</span><span class="c">${nf.format(x.count)} ครั้ง</span>` +
+    `<span class="bar"><i style="width:${(x.count / topMax) * 100}%"></i></span></li>`).join("")
+    : '<li class="empty">ยังไม่มีคนถาม</li>';
+
+  $("low").innerHTML = d.low.length ? d.low.map((x) =>
+    `<li><span class="q">${esc(x.question)}</span><span class="low">${starText(x.stars)}</span><small>${esc(x.ts)}</small></li>`).join("")
+    : '<li class="empty">ยังไม่มีคำตอบที่ได้ดาวน้อย 🎉</li>';
+
+  $("updated").textContent = "อัปเดต " + new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function load() {
+  fetch("/stats.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((d) => { $("err").classList.remove("show"); render(d); })
+    .catch(() => $("err").classList.add("show"));
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
