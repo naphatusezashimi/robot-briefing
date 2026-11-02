@@ -31,3 +31,6 @@ robot/stats.db
 # วิดีโอโหมดรอ (ไฟล์ใหญ่) — ก๊อปไปวางบน Pi เอง
 robot/web/static/videos/*
 !robot/web/static/videos/README.md
+
+# เสียงพูด AI ที่สร้างแล้ว (cache)
+robot/tts_cache/

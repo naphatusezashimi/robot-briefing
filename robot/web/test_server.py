@@ -13,6 +13,7 @@ def temp_stats(tmp_path, monkeypatch):
     """ทุกเทสต์ใช้ฐานสถิติชั่วคราว ไม่เขียนลง robot/stats.db ตัวจริง"""
     st = Stats(tmp_path / "stats.db")
     monkeypatch.setattr(server, "stats", st)
+    server.answers.clear()   # คำตอบที่จำไว้ของเทสต์ก่อน ไม่ให้ปนกัน
     return st
 
 
@@ -553,3 +554,117 @@ def test_announcements_due(tmp_path, monkeypatch):
     assert [a["text"] for a in d["due"]] == ["สวัสดีตอนเช้าค่ะ"]
     monkeypatch.setattr(server, "_now", lambda: datetime(2026, 11, 2, 9, 0, 5))
     assert make_client().get("/announcements/due").get_json()["due"] == []
+
+
+# ---- /tts: เสียงพูด AI ----
+@pytest.fixture
+def tts_env(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(server.config, "TTS_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(server.config, "AI_VOICE", True)
+    monkeypatch.setattr(server.config, "VOICE_ENGINE", "edge")
+
+    def fake_edge(text, lang):
+        calls.append((text, lang))
+        yield b"ID3"
+        yield b"mp3data"
+    monkeypatch.setattr(server, "edge_mp3_stream", fake_edge)
+    return calls
+
+
+def test_tts_streams_mp3_and_caches(tts_env):
+    c = make_client()
+    r = c.get("/tts", query_string={"text": "สวัสดีครับ", "lang": "th"})
+    assert r.status_code == 200 and r.mimetype == "audio/mpeg" and r.get_data() == b"ID3mp3data"
+    r2 = c.get("/tts", query_string={"text": "สวัสดีครับ", "lang": "th"})
+    assert r2.status_code == 200 and r2.get_data() == b"ID3mp3data"
+    assert tts_env == [("สวัสดีครับ", "th")]   # ครั้งที่สองใช้ไฟล์ที่เก็บไว้ ไม่สร้างซ้ำ
+
+
+def test_tts_rejects_empty_or_too_long(tts_env):
+    c = make_client()
+    assert c.get("/tts", query_string={"text": ""}).status_code == 400
+    assert c.get("/tts", query_string={"text": "ก" * 601}).status_code == 400
+
+
+def test_tts_edge_failure_returns_503(tts_env, monkeypatch):
+    def broken(text, lang):
+        raise ConnectionError("no internet")
+        yield b""
+    monkeypatch.setattr(server, "edge_mp3_stream", broken)
+    assert make_client().get("/tts", query_string={"text": "สวัสดี"}).status_code == 503
+
+
+def test_tts_disabled_by_config(tts_env, monkeypatch):
+    monkeypatch.setattr(server.config, "AI_VOICE", False)
+    assert make_client().get("/tts", query_string={"text": "สวัสดี"}).status_code == 404
+
+
+def test_tts_gemini_engine_quota_cools_down(tts_env, monkeypatch):
+    monkeypatch.setattr(server.config, "VOICE_ENGINE", "gemini")
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "_tts_off_until", 0.0)
+    hits = []
+
+    def boom(text, lang):
+        hits.append(text)
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+    monkeypatch.setattr(server, "speak_wav", boom)
+    c = make_client()
+    assert c.get("/tts", query_string={"text": "หนึ่ง"}).status_code == 503
+    assert c.get("/tts", query_string={"text": "สอง"}).status_code == 503
+    assert hits == ["หนึ่ง"]
+
+
+def test_gemini_voice_gets_only_the_text(monkeypatch):
+    import ai
+    seen = []
+
+    class Models:
+        def generate_content_stream(self, model, contents, config):
+            seen.append(contents)
+            part = type("P", (), {"inline_data": type("D", (), {"data": b"\x00\x00"})()})()
+            yield type("C", (), {"candidates": [type("X", (), {"content": type("Y", (), {"parts": [part]})()})()]})()
+    monkeypatch.setattr(ai, "_gemini_client", lambda key: type("Cl", (), {"models": Models()})())
+    assert b"".join(ai.speak_pcm_stream("สวัสดีครับ", "th")) == b"\x00\x00"
+    assert seen == ["สวัสดีครับ"]   # ไม่มีคำสั่งนำหน้า (เคยโดนอ่านออกเสียง)
+
+
+def test_screen_uses_ai_voice_with_local_fallback():
+    js = make_client().get("/static/screen.js").data.decode("utf-8")
+    assert "/tts?lang=" in js and "localSpeak" in js and "TTS_TIMEOUT_MS" in js
+    assert "startAttract()" in js   # เปิดหน้าเว็บมาเข้าโหมดรอ
+
+
+# ---- จำคำตอบ: ถามซ้ำตอบได้ทันที ไม่ถาม AI ใหม่ ----
+def test_repeat_question_answered_from_cache(monkeypatch):
+    calls = []
+
+    def fake_stream(q, c_, s, lang="th"):
+        calls.append(q)
+        yield "มีสาขา"
+        yield "ยานยนต์ไฟฟ้าครับ"
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "ask_ai_stream", fake_stream)
+    c = make_client()
+    first = c.post("/ask/stream", json={"question": "มีสาขายานยนต์ไฟฟ้าไหม"}).get_data(as_text=True)
+    again = c.post("/ask/stream", json={"question": "มีสาขายานยนต์ไฟฟ้าไหมครับ ?"}).get_data(as_text=True)
+    assert calls == ["มีสาขายานยนต์ไฟฟ้าไหม"]   # ครั้งที่สองไม่ถาม AI (ต่างแค่ "ครับ ?")
+    text = lambda out: "".join(_json.loads(l).get("t", "") for l in out.splitlines() if l.strip())   # noqa: E731
+    assert text(first) == text(again) == "มีสาขายานยนต์ไฟฟ้าครับ"
+    assert sum(t["count"] for t in server.stats.summary()["top"]) == 2   # ตอบจากที่จำไว้ก็ยังนับสถิติ
+
+
+def test_failed_answer_is_not_cached(monkeypatch):
+    calls = []
+
+    def flaky(q, c_, s, lang="th"):
+        calls.append(q)
+        yield "ครึ่ง"
+        raise RuntimeError("503 UNAVAILABLE")
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "ask_ai_stream", flaky)
+    c = make_client()
+    c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
+    c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
+    assert len(calls) == 2

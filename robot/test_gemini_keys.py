@@ -35,6 +35,7 @@ def fake(monkeypatch):
     monkeypatch.setattr(ai, "GEMINI_API_KEYS", ["k1", "k2", "k3"])
     monkeypatch.setattr(ai, "_gemini_idx", 0)
     monkeypatch.setattr(ai, "GEMINI_MODEL", "main")
+    monkeypatch.setattr(ai, "_skip_until", {})
     monkeypatch.setattr(ai, "GEMINI_FALLBACK_MODELS", ["backup"])
     BUSY.clear(); NOT_FOUND.clear()
     monkeypatch.setattr(ai, "_gemini_config", lambda *a: None)
@@ -94,3 +95,21 @@ def test_model_not_for_key_tries_next_key(fake):
     _, _ = fake
     NOT_FOUND.add(("k1", "main"))
     assert list(ai._stream_gemini("q", {}, {})) == ["ตอบจาก k2"]
+
+
+def test_exhausted_key_is_skipped_next_time(fake, monkeypatch):
+    log, quota = fake
+    monkeypatch.setattr(ai, "_skip_until", {})
+    quota.add("k1")
+    ai._ask_gemini("q", {}, {})
+    monkeypatch.setattr(ai, "_gemini_idx", 0)   # แม้จะเริ่มที่ k1 อีก
+    log.clear()
+    ai._ask_gemini("q", {}, {})
+    assert log == ["k2"]                        # ข้าม k1 ที่เพิ่งโควตาหมดไปเลย
+
+
+def test_all_keys_cooling_down_raises_quota(fake, monkeypatch):
+    import time
+    monkeypatch.setattr(ai, "_skip_until", {(m, k): time.time() + 60 for m in ("main", "backup") for k in ("k1", "k2", "k3")})
+    with pytest.raises(RuntimeError, match="RESOURCE_EXHAUSTED"):
+        ai._ask_gemini("q", {}, {})

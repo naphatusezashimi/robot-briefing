@@ -21,7 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
 from flask import Flask, request, jsonify, send_from_directory, Response  # noqa: E402
 import config                                                   # noqa: E402
 from database import load_college_data, load_saraburi_data      # noqa: E402
-from ai import ask_ai, ask_ai_stream, is_quota_error                            # noqa: E402
+from ai import ask_ai, ask_ai_stream, is_quota_error, speak_wav                            # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
 from places import photos_for, menu_tree                       # noqa: E402
 import json                                                    # noqa: E402
@@ -30,6 +30,7 @@ from gpio_btn import GpioButton                                # noqa: E402
 from arm import Arm                                            # noqa: E402
 from stats import Stats                                        # noqa: E402
 from announce import load_announcements, due_announcements    # noqa: E402
+from answer_cache import AnswerCache, replay_pieces            # noqa: E402
 from datetime import datetime                                  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -46,6 +47,9 @@ button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
 arm = Arm()
 stats = Stats(ROBOT_DIR / config.STATS_DB_PATH)
+# คำถามที่เคยตอบแล้ว ตอบซ้ำได้ทันที (แก้ไฟล์ข้อมูลเมื่อไหร่ คำตอบเก่าใช้ไม่ได้เอง)
+answers = AnswerCache(config.ANSWER_CACHE_SECONDS, data_files=[
+    ROBOT_DIR / config.COLLEGE_DATA_PATH, ROBOT_DIR / config.SARABURI_DATA_PATH, config.SAR_DATA_PATH])
 _now = datetime.now   # แยกไว้ให้เทสต์แกล้งเปลี่ยนเวลาได้
 
 
@@ -126,7 +130,10 @@ def ask():
     stats.log_question(question, lang)
     state["value"] = "thinking"
     try:
-        answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+        answer = answers.get(question, lang)
+        if answer is None:
+            answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+            answers.put(question, lang, answer)
         state["value"] = "answering"
         result = {"answer": answer, "photos": []}
         if wants_map(question):
@@ -180,11 +187,15 @@ def ask_stream():
         line = lambda obj: json.dumps(obj, ensure_ascii=False) + "\n"   # noqa: E731
         pieces = []
         try:
-            for piece in ask_ai_stream(question, college_data, saraburi_data, lang=lang):
+            cached = answers.get(question, lang)
+            source = replay_pieces(cached) if cached else ask_ai_stream(question, college_data, saraburi_data, lang=lang)
+            for piece in source:
                 state["value"] = "answering"
                 pieces.append(piece)
                 yield line({"t": piece})
             state["value"] = "answering"
+            if not cached:
+                answers.put(question, lang, "".join(pieces))   # ตอบครบแล้วค่อยจำ (ขาดกลางทางไม่จำ)
             # หารูปจากคำตอบที่ต่อครบแล้ว (ชื่อสถานที่อาจถูกตัดคร่อมสองท่อน)
             photos = [] if image else photos_for(question, "".join(pieces), saraburi_data, lang=lang)
             yield line({"done": True, "image": image, "photos": photos})
@@ -201,6 +212,113 @@ def ask_stream():
 def greet():
     """โบกมือ 1 รอบ (จอเนื้อหาเป็นคนเรียก พร้อมกับพูดคำทักทายเอง)"""
     return jsonify(ok=True, waving=arm.wave())
+
+
+# ---- เสียงพูด AI: GET /tts?lang=th&text=… → ไฟล์เสียง (หน้าจอใช้ <audio src> เล่นได้ทันทีที่ท่อนแรกมาถึง) ----
+# edge  : MP3 ทยอยส่งระหว่างสร้าง (ท่อนแรกราว 1–2 วิ)
+# gemini: WAV ทั้งไฟล์ (ต้องรอสร้างเสร็จ)
+# ทุกเสียงที่สร้างแล้วเก็บไฟล์ไว้ใช้ซ้ำ เช่น คำทักทาย/ประกาศ ไม่ต้องสร้างใหม่ทุกครั้ง
+TTS_MAX_CHARS = 600
+TTS_CACHE_FILES = 300                  # เก็บเสียงล่าสุดไม่เกินเท่านี้ไฟล์
+TTS_QUOTA_COOLDOWN = 10 * 60           # (gemini) โควตาเสียงหมด → พัก 10 นาที ระหว่างนั้นหน้าจอใช้เสียงในเครื่อง
+_tts_off_until = 0.0
+
+
+def _tts_cache_path(text: str, lang: str) -> Path:
+    import hashlib
+    if config.VOICE_ENGINE == "gemini":
+        voice, ext = config.GEMINI_TTS_VOICE, "wav"
+    else:
+        voice = config.EDGE_TTS_VOICE_EN if lang == "en" else config.EDGE_TTS_VOICE
+        voice, ext = f"{voice}{config.EDGE_TTS_RATE}", "mp3"
+    h = hashlib.sha1(f"v3|{config.VOICE_ENGINE}|{voice}|{lang}|{text}".encode("utf-8")).hexdigest()
+    return Path(config.TTS_CACHE_DIR) / f"{h}.{ext}"
+
+
+def _prune_tts_cache() -> None:
+    files = sorted(Path(config.TTS_CACHE_DIR).glob("*.*"), key=lambda f: f.stat().st_mtime)
+    for f in files[:-TTS_CACHE_FILES]:
+        f.unlink(missing_ok=True)
+
+
+def _save_tts(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    _prune_tts_cache()
+
+
+def edge_mp3_stream(text: str, lang: str):
+    """ข้อความ → MP3 ทยอยเป็นท่อน (edge-tts เป็น async — วน event loop เองทีละท่อน)"""
+    import asyncio
+    import edge_tts
+    voice = config.EDGE_TTS_VOICE_EN if lang == "en" else config.EDGE_TTS_VOICE
+    agen = edge_tts.Communicate(text, voice, rate=config.EDGE_TTS_RATE).stream()
+    loop = asyncio.new_event_loop()
+    try:
+        while True:
+            try:
+                chunk = loop.run_until_complete(agen.__anext__())
+            except StopAsyncIteration:
+                break
+            if chunk.get("type") == "audio" and chunk.get("data"):
+                yield chunk["data"]
+    finally:
+        loop.run_until_complete(agen.aclose())
+        loop.close()
+
+
+@app.get("/tts")
+def tts():
+    global _tts_off_until
+    import time
+    text = (request.args.get("text") or "").strip()
+    lang = request.args.get("lang") if request.args.get("lang") in LANGS else "th"
+    if not config.AI_VOICE:
+        return jsonify(error="ปิดเสียง AI อยู่ (AI_VOICE = False)"), 404
+    if not text or len(text) > TTS_MAX_CHARS:
+        return jsonify(error=f"ข้อความต้องยาว 1–{TTS_MAX_CHARS} ตัวอักษร"), 400
+    path = _tts_cache_path(text, lang)
+    mime = "audio/wav" if path.suffix == ".wav" else "audio/mpeg"
+    if path.exists():
+        path.touch()
+        return send_from_directory(path.parent, path.name, mimetype=mime)
+
+    if config.VOICE_ENGINE == "gemini":
+        if time.time() < _tts_off_until or missing_key_error():
+            return jsonify(error="เสียง AI ใช้ไม่ได้ชั่วคราว"), 503
+        try:
+            wav = speak_wav(text, lang)
+        except Exception as e:
+            if is_quota_error(e):
+                _tts_off_until = time.time() + TTS_QUOTA_COOLDOWN
+            print("TTS error:", str(e)[:200])
+            return jsonify(error="สร้างเสียงไม่สำเร็จ"), 503
+        _save_tts(path, wav)
+        return Response(wav, mimetype=mime)
+
+    # edge: ขอท่อนแรกก่อนตอบ — ถ้าเชื่อมต่อไม่ได้ จะได้ตอบ 503 ให้หน้าจอใช้เสียงในเครื่องแทน
+    stream = edge_mp3_stream(text, lang)
+    try:
+        first = next(stream)
+    except Exception as e:
+        print("TTS error:", str(e)[:200])
+        return jsonify(error="สร้างเสียงไม่สำเร็จ"), 503
+
+    def gen():
+        got = [first]
+        yield first
+        try:
+            for piece in stream:
+                got.append(piece)
+                yield piece
+        except Exception as e:
+            print("TTS error:", str(e)[:200])
+            return
+        _save_tts(path, b"".join(got))
+
+    return Response(gen(), mimetype=mime, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/rate")

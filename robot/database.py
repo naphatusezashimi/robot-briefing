@@ -38,9 +38,13 @@ def load_sar_text() -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
-def format_all_data(college_data: dict, saraburi_data: dict, sar_text: str = None) -> str:
+def format_all_data(college_data: dict, saraburi_data: dict, sar_text: str = None, question: str = None) -> str:
+    """รวมข้อมูลทั้งหมดให้ AI — ถ้าให้ question มา จะแนบ SAR เฉพาะส่วนที่เกี่ยวกับคำถาม (ตอบเร็วขึ้นมาก)"""
     parts = ["ข้อมูลวิทยาลัย:\n" + format_for_prompt(college_data)]
     sar = load_sar_text() if sar_text is None else sar_text
+    if sar and question:
+        import retrieval
+        sar = retrieval.select(sar, question, budget=config.SAR_BUDGET_CHARS)
     if sar:
         parts.append("ข้อมูลวิทยาลัยเพิ่มเติมจากรายงาน SAR ปีการศึกษา 2568:\n" + sar)
     if saraburi_data:
