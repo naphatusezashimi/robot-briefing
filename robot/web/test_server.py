@@ -477,10 +477,11 @@ def test_face_shows_waving_hand_when_greeting():
     assert "body.state-greeting .hand" in html
 
 
-def test_screen_greets_as_female_tl_bot():
+def test_screen_greets_as_male_tl_bot():
     c = make_client()
     js = c.get("/static/screen.js").data.decode("utf-8")
-    assert "หนูชื่อทีแอลบอท" in js
+    assert "ผมชื่อทีแอลบอท" in js
+    assert "หนู" not in js and "ค่ะ" not in js
     assert "/greet" in js
 
 

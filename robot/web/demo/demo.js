@@ -4,9 +4,9 @@
 (function () {
   const realFetch = window.fetch.bind(window);
   const NOTE = {
-    th: "นี่คือเดโมหน้าจอค่ะ 🙂 เวอร์ชันบนเว็บยังตอบคำถามด้วย AI ไม่ได้ (หุ่นตัวจริงที่วิทยาลัยตอบได้)\n\n" +
-      "ลองแตะ **🏞️ ที่เที่ยวสระบุรี** หรือ **🛍️ ของฝากสระบุรี** หรือ **🗺️ แผนผังวิทยาลัย** ดูได้เลยนะคะ " +
-      "แล้วลองให้ดาวคำตอบนี้ข้างล่างได้ค่ะ ⭐",
+    th: "นี่คือเดโมหน้าจอครับ 🙂 เวอร์ชันบนเว็บยังตอบคำถามด้วย AI ไม่ได้ (หุ่นตัวจริงที่วิทยาลัยตอบได้)\n\n" +
+      "ลองแตะ **🏞️ ที่เที่ยวสระบุรี** หรือ **🛍️ ของฝากสระบุรี** หรือ **🗺️ แผนผังวิทยาลัย** ดูได้เลยนะครับ " +
+      "แล้วลองให้ดาวคำตอบนี้ข้างล่างได้ครับ ⭐",
     en: "This is a screen demo 🙂 The web version can't answer with AI (the real robot at the college can).\n\n" +
       "Try tapping **🏞️ Places to visit**, **🛍️ Local souvenirs** or **🗺️ Campus map**, and rate this answer below ⭐",
   };
@@ -91,7 +91,7 @@
       add("📺 ลองโหมดรอ", null, () => window.startAttract && window.startAttract());
       add("📢 ลองประกาศ", null, () => {
         if (!window.runAnnouncements) return;
-        annQueue.push({ id: "demo-" + Date.now(), text: "ได้เวลาพักเที่ยงแล้วค่ะ ทานข้าวให้อร่อยนะคะ",   // eslint-disable-line no-undef
+        annQueue.push({ id: "demo-" + Date.now(), text: "ได้เวลาพักเที่ยงแล้วครับ ทานข้าวให้อร่อยนะครับ",   // eslint-disable-line no-undef
           text_en: "It's lunchtime. Enjoy your meal!", at: Date.now() });
         window.runAnnouncements();
       });

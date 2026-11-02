@@ -141,11 +141,11 @@ def ask():
 
 _FRIENDLY = {
     "quota": {
-        "th": "วันนี้มีคนถามเยอะจนโควตา AI หมดแล้วค่ะ 😅 ลองใหม่พรุ่งนี้ หรือติดต่อเจ้าหน้าที่ได้ที่ 0-3628-1295 นะคะ",
+        "th": "วันนี้มีคนถามเยอะจนโควตา AI หมดแล้วครับ 😅 ลองใหม่พรุ่งนี้ หรือติดต่อเจ้าหน้าที่ได้ที่ 0-3628-1295 นะครับ",
         "en": "So many questions today that the AI quota ran out 😅 Please try again tomorrow, or call our staff at 0-3628-1295.",
     },
     "busy": {
-        "th": "ตอนนี้ระบบ AI ยุ่งมากค่ะ ⏳ รอสักครู่แล้วถามใหม่อีกครั้งนะคะ",
+        "th": "ตอนนี้ระบบ AI ยุ่งมากครับ ⏳ รอสักครู่แล้วถามใหม่อีกครั้งนะครับ",
         "en": "The AI service is very busy right now ⏳ Please wait a moment and ask again.",
     },
 }
