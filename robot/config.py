@@ -36,6 +36,8 @@ AI_MAX_TOKENS = 800
 # โมเดลของแต่ละเจ้า
 CLAUDE_MODEL = "claude-sonnet-4-6"
 GEMINI_MODEL = "gemini-3.5-flash"
+# โมเดลหลักล่ม/คนใช้เยอะ → ลองโมเดลสำรองตามลำดับ (gemini-2.5-flash ใช้ได้เฉพาะ key เก่า)
+GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash"]
 
 # --- ตั้งค่าเสียง (เฟส 2) ---
 RECORD_SECONDS = 5
