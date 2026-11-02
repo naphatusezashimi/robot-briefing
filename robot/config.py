@@ -8,7 +8,23 @@ SIMULATOR_MODE = True
 
 # --- API Keys (เก็บใน .env ไม่ hardcode) ---
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+
+def _key_list(*raw: str) -> list:
+    """รวม key จากหลายตัวแปร (คั่นด้วย , ได้) ตัดช่องว่าง ตัดตัวซ้ำ ตัดค่าตัวอย่าง xxxx"""
+    keys = []
+    for r in raw:
+        for k in (r or "").split(","):
+            k = k.strip()
+            if k and "xxxx" not in k and k not in keys:
+                keys.append(k)
+    return keys
+
+
+# Gemini ใส่ได้หลาย key: GEMINI_API_KEYS = key1, key2, key3 (ควรเป็นคนละโปรเจกต์ — โควตาฟรีนับต่อโปรเจกต์)
+# โควตา key ไหนหมด หุ่นสลับไปใช้ key ถัดไปให้เอง
+GEMINI_API_KEYS = _key_list(os.environ.get("GEMINI_API_KEYS", ""), os.environ.get("GEMINI_API_KEY", ""))
+GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # --- ตั้งค่า AI ---
@@ -19,7 +35,7 @@ AI_MAX_TOKENS = 800
 
 # โมเดลของแต่ละเจ้า
 CLAUDE_MODEL = "claude-sonnet-4-6"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 # --- ตั้งค่าเสียง (เฟส 2) ---
 RECORD_SECONDS = 5
@@ -30,6 +46,8 @@ AUDIO_OUT = "answer.wav"
 # --- ไฟล์ฐานข้อมูล ---
 COLLEGE_DATA_PATH = "college_data.json"
 SARABURI_DATA_PATH = "saraburi_data.json"
+# ข้อมูลจากรายงาน SAR ปีการศึกษา 2568 (สรุป + คำถาม-คำตอบ 266 ข้อ) — ตัดส่วนข้อมูลภายในออกแล้ว
+SAR_DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sar_2568.md")
 
 # --- ตั้งค่าเว็บ (เฟสกล่องพูดได้) ---
 # "0.0.0.0" = มือถือ/คอมเครื่องอื่นที่ต่อ Wi-Fi เดียวกันเปิดได้ (เช่น ดูหน้า /stats)

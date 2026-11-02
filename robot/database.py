@@ -32,8 +32,17 @@ def _without_photos(data):
     return data
 
 
-def format_all_data(college_data: dict, saraburi_data: dict) -> str:
+def load_sar_text() -> str:
+    """ข้อมูลจากรายงาน SAR 2568 (ข้อความ markdown) — ไม่มีไฟล์ก็คืน "" ให้ระบบรันต่อได้"""
+    path = Path(config.SAR_DATA_PATH)
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def format_all_data(college_data: dict, saraburi_data: dict, sar_text: str = None) -> str:
     parts = ["ข้อมูลวิทยาลัย:\n" + format_for_prompt(college_data)]
+    sar = load_sar_text() if sar_text is None else sar_text
+    if sar:
+        parts.append("ข้อมูลวิทยาลัยเพิ่มเติมจากรายงาน SAR ปีการศึกษา 2568:\n" + sar)
     if saraburi_data:
         parts.append("ข้อมูลจังหวัดสระบุรี:\n" + format_for_prompt(_without_photos(saraburi_data)))
     return "\n\n".join(parts)

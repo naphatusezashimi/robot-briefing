@@ -21,7 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
 from flask import Flask, request, jsonify, send_from_directory, Response  # noqa: E402
 import config                                                   # noqa: E402
 from database import load_college_data, load_saraburi_data      # noqa: E402
-from ai import ask_ai, ask_ai_stream                            # noqa: E402
+from ai import ask_ai, ask_ai_stream, is_quota_error                            # noqa: E402
 from wayfinding import wants_map                               # noqa: E402
 from places import photos_for, menu_tree                       # noqa: E402
 import json                                                    # noqa: E402
@@ -154,7 +154,7 @@ _FRIENDLY = {
 def friendly_error(e: Exception, lang: str) -> str:
     """แปลง error ที่เจอบ่อยจาก AI ให้คนหน้าจออ่านเข้าใจ (อันอื่นโชว์ตามจริงไว้แก้ปัญหา)"""
     msg = str(e)
-    if "RESOURCE_EXHAUSTED" in msg or "429" in msg or "rate_limit" in msg:
+    if is_quota_error(e):
         return _FRIENDLY["quota"][lang]
     if "UNAVAILABLE" in msg or "503" in msg or "overloaded" in msg.lower() or "529" in msg:
         return _FRIENDLY["busy"][lang]

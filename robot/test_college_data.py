@@ -18,3 +18,14 @@ def test_college_data_has_director_name():
 def test_director_name_reaches_ai_prompt():
     result = format_all_data(load_college_data(), {})
     assert "นายเฉลิมชนม์ เวทสรากุล" in result
+
+
+def test_sar_2568_included_without_internal_sections():
+    from database import load_sar_text
+    sar = load_sar_text()
+    assert "คลังคำถาม-คำตอบ (266 ข้อ)" in sar
+    assert "Fact Sheet" in sar
+    # ส่วนข้อมูลภายในของเอกสารต้นฉบับไม่ส่งให้หุ่น
+    assert "จุดที่ควรพัฒนาและแผนปี 2569 (ข้อมูลภายใน)" not in sar
+    assert "ข้อความที่ขัดกัน" not in sar
+    assert "รายงาน SAR ปีการศึกษา 2568" in format_all_data({}, {})
