@@ -25,6 +25,7 @@ const T = {
     rateAsk: "คำตอบนี้ช่วยได้ไหมครับ?", rateThanks: "ขอบคุณที่ให้คะแนนครับ 🙏", starUnit: "ดาว",
     attractSub: "สวัสดีครับ ผมชื่อทีแอลบอท ผู้ช่วยตอบคำถามของวิทยาลัย", attractTap: "👆 แตะจอเพื่อถามหุ่นยนต์",
     announceTag: "ประกาศ",
+    stopTalk: "⏹ หยุดพูด", seeScreen: "รายละเอียดเพิ่มเติมดูบนจอได้เลยครับ",
     states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีครับ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
   },
@@ -50,6 +51,7 @@ const T = {
     rateAsk: "Was this answer helpful?", rateThanks: "Thanks for rating! 🙏", starUnit: "stars",
     attractSub: "Hi! I'm TL-Bot, the college's question assistant.", attractTap: "👆 Tap the screen to ask the robot",
     announceTag: "Announcement",
+    stopTalk: "⏹ Stop", seeScreen: "More details are on the screen.",
     states: { idle: "Ready", greeting: "Hello! 👋", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
     speech: "en-US",
   },
@@ -80,7 +82,8 @@ function setState(s) {
     body: JSON.stringify({ state: s, lang }),
   }).catch(() => {});
 }
-const busy = () => state === "thinking" || state === "answering";
+// กำลังอ่านคำตอบออกเสียง (ไม่ใช่กำลังพิมพ์คำตอบ) ไม่นับว่ายุ่ง — ถามข้อใหม่/กดไมค์แล้วเสียงเก่าหยุดเอง
+const busy = () => state === "thinking" || (state === "answering" && !answerTalking);
 
 // ---- หน้าแรก ↔ หน้าคุย: ย้ายช่องถามจากกลางจอลงล่าง ----
 function setView(v) {
@@ -149,6 +152,29 @@ function plainForSpeech(text) {
     .replace(/^#{1,6}\s+/gm, "").replace(/\s\*\s+/g, " ").replace(/[*#•]/g, "").replace(/\s+/g, " ").trim();
 }
 
+// ---- เสียงอ่านแบบย่อ: จอโชว์คำตอบเต็ม แต่เสียงอ่านแค่ช่วงต้น (ไม่เกิน SPEAK_MAX_CHARS ตัวอักษร) ----
+const SPEAK_MAX_CHARS = 200;   // ภาษาไทยราว 12–15 วินาที — อยากให้อ่านยาวขึ้น/สั้นลงแก้ตรงนี้
+function speechSummary(text, lng) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const structural = (l) => /^(#{1,6}\s|[*•-]\s|\d+\.\s)/.test(l) || /^\*\*[^*]+\*\*:?[\s\p{Extended_Pictographic}️]*$/u.test(l);
+  const out = []; let len = 0, cut = false, listMode = false;
+  for (const line of lines) {
+    const st = structural(line);
+    if (out.length && st && !listMode) { cut = true; break; }    // อ่านบทนำจบแล้ว เจอหัวข้อ/รายการ → พอ
+    if (!out.length && st) listMode = true;                      // คำตอบเริ่มด้วยรายการเลย → อ่านรายการต้น ๆ
+    const p = plainForSpeech(line);
+    if (!p) continue;
+    if (out.length && len + p.length > SPEAK_MAX_CHARS) { cut = true; break; }
+    out.push(p); len += p.length;
+  }
+  let say = out.join(" ");
+  if (say.length > SPEAK_MAX_CHARS * 1.5) {                      // ย่อหน้าแรกยาวมาก → ตัดที่ช่องว่างก่อนถึงขีดจำกัด
+    const sp = say.lastIndexOf(" ", SPEAK_MAX_CHARS);
+    say = say.slice(0, sp > 40 ? sp : SPEAK_MAX_CHARS); cut = true;
+  }
+  return cut ? say + " " + T[lng].seeScreen : say;
+}
+
 const AVA = '<div class="ava"><div class="face"><i></i><i></i></div></div>';
 const REPLAY_ICON = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>';
 
@@ -189,8 +215,8 @@ function renderBot(m, text, opts = {}) {
   if (follow) box.querySelectorAll("img").forEach((i) => i.addEventListener("load", scrollDown, { once: true }));
   const r = box.querySelector(".replay");
   if (r) {
-    const say = plainForSpeech(text), sayLang = lang;
-    r.addEventListener("click", () => { if (busy()) return; setState("answering"); speak(say, sayLang, () => setState("idle")); });
+    const sayLang = lang;
+    r.addEventListener("click", () => { if (busy()) return; setState("answering"); speakAnswer(text, sayLang); });
   }
 }
 
@@ -261,28 +287,104 @@ function typing(on) {
   } else if (!on && el) { el.remove(); }
 }
 
-// ---- พูดออกเสียง (TTS) ----
+// ---- พูดออกเสียง ----
+// หลัก: เสียง AI จากเซิร์ฟเวอร์ (/tts — Gemini เสียงผู้ชายเป็นธรรมชาติ)
+// สำรอง: เสียงในเครื่อง (Web Speech) — ใช้เมื่อสร้างเสียงไม่ทัน / โควตาหมด / ไม่มีเน็ต
+const SPEECH_RATE = 1.15;      // ความเร็วพูดของเสียงในเครื่อง (1 = ปกติ) — เสียง AI ตั้งที่ EDGE_TTS_RATE ใน config.py
+const TTS_TIMEOUT_MS = 6000;   // รอเสียง AI เริ่มดังนานสุดเท่านี้ ไม่ทันก็ใช้เสียงในเครื่อง
+let ttsJob = null;             // เสียงที่กำลังพูดอยู่ (มีได้ทีละอัน)
+
+const ttsUrl = (text, lng) => "/tts?lang=" + lng + "&text=" + encodeURIComponent(text);
+// ให้เซิร์ฟเวอร์สร้างเสียงเก็บไว้ล่วงหน้า (คำทักทาย/ประกาศ) ตอนพูดจริงจะได้ทันที
+const warmed = new Set();
+function warmTts(text, lng) {
+  const url = ttsUrl(text, lng);
+  if (warmed.has(url) || !window.fetch) return;
+  warmed.add(url);
+  fetch(url).then((r) => r.blob()).catch(() => warmed.delete(url));
+}
+
+// รายชื่อเสียงในเครื่องโหลดช้า — จำไว้ตั้งแต่โหลดเสร็จ จะได้ไม่พลาดเสียงผู้ชายตอนพูดครั้งแรก
+let localVoices = [];
+function loadVoices() { if ("speechSynthesis" in window) localVoices = window.speechSynthesis.getVoices(); }
+loadVoices();
+if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+
 function speak(text, speakLang, onEnd) {
-  if (!("speechSynthesis" in window)) { if (onEnd) onEnd(); return; }
-  window.speechSynthesis.cancel();
+  stopSpeech();   // พูดได้ทีละอัน — อันเก่าจบ (เรียก onEnd ของมัน) ก่อนเริ่มอันใหม่
+  const job = { ended: false, audio: null };
+  job.finish = () => {
+    if (job.ended) return;
+    job.ended = true;
+    if (ttsJob === job) ttsJob = null;
+    if (onEnd) onEnd();
+  };
+  ttsJob = job;
+  const local = () => {
+    if (job.ended || job.local) return;   // กันเรียกซ้ำ (ถอดเสียง AI ออกแล้วอาจมี error ตามมาอีกรอบ)
+    job.local = true;
+    if (job.audio) { job.audio.pause(); job.audio.removeAttribute("src"); job.audio = null; }
+    localSpeak(text, speakLang, job);
+  };
+  if (!window.Audio) { local(); return; }
+  // เบราว์เซอร์เล่น MP3 ได้ตั้งแต่ท่อนแรกมาถึง ไม่ต้องรอเซิร์ฟเวอร์สร้างเสร็จทั้งประโยค
+  const a = new Audio(ttsUrl(text, speakLang));
+  job.audio = a;
+  let started = false;
+  const timer = setTimeout(() => { if (!started) local(); }, TTS_TIMEOUT_MS);
+  a.addEventListener("playing", () => { started = true; clearTimeout(timer); });
+  a.addEventListener("ended", () => { clearTimeout(timer); job.finish(); });
+  a.addEventListener("error", () => { clearTimeout(timer); if (!started) local(); else job.finish(); });
+  a.play().catch(() => { clearTimeout(timer); if (!started) local(); });   // บล็อกเสียงอัตโนมัติ → เสียงในเครื่อง
+}
+
+function localSpeak(text, speakLang, job) {
+  if (!("speechSynthesis" in window)) { job.finish(); return; }
   const code = T[speakLang].speech;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = code;
-  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang && v.lang.toLowerCase().startsWith(code.slice(0, 2)));
-  // หุ่นเป็นผู้ชาย: หาเสียงผู้ชายก่อน (Windows: Pattara / Edge: Niwat) — male ไม่ติดคำว่า female
-  const male = voices.find((v) => /ชาย|male|man|pattara|niwat|david|guy|mark|ryan|christopher/i.test(v.name));
-  const voice = male || voices[0];
-  if (voice) u.voice = voice;
-  if (!male) u.pitch = 0.75;   // ไม่มีเสียงผู้ชายในเครื่อง → กดเสียงให้ทุ้มลง
-  u.onend = () => onEnd && onEnd();
-  u.onerror = () => onEnd && onEnd();
+  const voices = (localVoices.length ? localVoices : window.speechSynthesis.getVoices())
+    .filter((v) => v.lang && v.lang.toLowerCase().startsWith(code.slice(0, 2)));
+  // หุ่นเป็นผู้ชาย: หาเสียงผู้ชายก่อน (Windows: Pattara / Edge: Niwat) — \bmale ไม่ติดคำว่า female
+  const male = voices.find((v) => /ชาย|\bmale|\bman\b|pattara|niwat|david|guy|mark|ryan|christopher/i.test(v.name));
+  if (male || voices[0]) u.voice = male || voices[0];
+  u.rate = SPEECH_RATE;
+  u.onend = job.finish;
+  u.onerror = job.finish;
   window.speechSynthesis.speak(u);
 }
+
+// หยุดเสียงที่กำลังพูด/กำลังรอสร้าง ทันที (onEnd ของเสียงนั้นถูกเรียกตามปกติ)
+function stopSpeech() {
+  const job = ttsJob;
+  ttsJob = null;
+  if (job && job.audio) { job.audio.pause(); job.audio.removeAttribute("src"); job.audio.load(); }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  if (job) job.finish();
+}
+
+// อ่านคำตอบ (แบบย่อ) + โชว์ปุ่มหยุดพูด — ถามข้อใหม่/กดไมค์/กดหยุด แล้วเสียงหยุดทันที
+let answerTalking = false, answerGen = 0;
+function speakAnswer(text, lng) {
+  const g = ++answerGen;
+  answerTalking = true; body.classList.add("speaking");
+  speak(speechSummary(text, lng), lng, () => {
+    if (g !== answerGen) return;   // เสียงนี้ถูกเสียงใหม่แทนที่ไปแล้ว
+    answerTalking = false; body.classList.remove("speaking");
+    lastActive = Date.now();
+    if (state === "answering") setState("idle");
+  });
+}
+function stopAnswer() {
+  if (answerTalking) stopSpeech();
+}
+$("stopTalk").addEventListener("click", stopAnswer);
 
 // ---- ถาม-ตอบหลัก ----
 async function ask(question, opts = {}) {
   question = (question || "").trim();
   if (!question) { setState("idle"); return; }
+  stopAnswer();   // ยังอ่านคำตอบเก่าอยู่ → หยุดก่อนถามข้อใหม่
   const askLang = lang, myConvo = convo;
   const stale = () => myConvo !== convo;
   addMsg("user", question, { voice: !!opts.voice });
@@ -330,11 +432,11 @@ async function ask(question, opts = {}) {
       }
     }
     if (!tw) { fail(end && end.error); return; }          // พังก่อนได้สักคำ
+    if (!(end && end.error)) speakAnswer(tw.text, askLang);
     const ok = !(end && end.error);   // ตอบไม่จบ ไม่ต้องขอดาว
     tw.finish({ image: (end && end.image) || null, photos: (end && end.photos) || [], rateQ: ok ? question : "" }, () => {
       if (stale()) return;
-      if (end && end.error) addMsg("bot", t().sysErr, { warn: true });   // ขาดกลางทาง: ที่ได้แล้วยังอยู่
-      speak(plainForSpeech(tw.text), askLang, () => { lastActive = Date.now(); setState("idle"); });
+      if (end && end.error) { addMsg("bot", t().sysErr, { warn: true }); speakAnswer(tw.text, askLang); }   // ขาดกลางทาง: อ่านส่วนที่ได้
     });
   } catch (e) {
     fail();
@@ -347,6 +449,9 @@ const GREET_IDLE_MS = 60 * 1000;   // ให้ตรงกับ GREET_IDLE_SEC
 const GREET_MIN_MS = 3000;         // หน้ายิ้มค้างอย่างน้อยเท่ากับเวลาแขนโบก
 let lastActive = -Infinity;        // เปิดเครื่องมา คนแรกที่แตะได้รับการทักเลย
 let greeting = null;               // Promise ระหว่างกำลังทัก (ไมค์รอให้ทักเสร็จก่อน ไม่งั้นได้ยินเสียงตัวเอง)
+
+// เตรียมเสียงคำทักทายไว้ตั้งแต่เปิดจอ (เซิร์ฟเวอร์เก็บไฟล์ไว้ ครั้งต่อไปได้ทันที)
+setTimeout(() => warmTts(T.th.greet, "th"), 2000);
 
 function greet() {
   if (greeting || busy() || listening) return;
@@ -378,7 +483,7 @@ function toggleMic() {
   if (listening) { recog.stop(); listening = false; setState("idle"); return; }
   if (busy()) return;
   if (greeting) { greeting.then(toggleMic); return; }   // ทักให้จบก่อน แล้วเริ่มฟังเอง
-  window.speechSynthesis && window.speechSynthesis.cancel();
+  stopSpeech();
   setState("listening"); listening = true;
   try { recog.start(); } catch (e) { listening = false; setState("idle"); }
 }
@@ -410,7 +515,7 @@ document.querySelectorAll("#quickQs .chip").forEach((chip) => {
 
 function newChat() {
   if (recog && listening) { recog.stop(); listening = false; }
-  window.speechSynthesis && window.speechSynthesis.cancel();
+  stopSpeech();
   convo++;
   chat.innerHTML = "";
   setView("welcome");
@@ -513,7 +618,8 @@ evtSrc.onmessage = (e) => {
 // วิดีโอมาจาก /attract (ไฟล์ใน web/static/videos/) ไม่มีวิดีโอ = โชว์ตราวิทยาลัยแทน
 const attractEl = $("attract"), video = attractEl.querySelector("video");
 let attractCfg = { videos: [], after: 90 }, attractOn = false, vidIdx = 0, vidFails = 0;
-fetch("/attract").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) attractCfg = d; }).catch(() => {});
+fetch("/attract").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) attractCfg = d; }).catch(() => {})
+  .then(() => startAttract());   // เปิดหน้าเว็บมา เริ่มที่โหมดรอเลย
 
 function playVideo() {
   const list = attractCfg.videos || [];
@@ -566,6 +672,7 @@ function pollAnnouncements() {
     for (const a of (d && d.due) || []) {
       if (annDone.has(a.id) || annQueue.some((q) => q.id === a.id)) continue;
       annQueue.push({ ...a, at: Date.now() });
+      warmTts(plainForSpeech(a.text), "th");   // เตรียมเสียงประกาศไว้ก่อน
     }
     runAnnouncements();
   }).catch(() => {});
