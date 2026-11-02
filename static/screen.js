@@ -7,25 +7,25 @@ const T = {
     brand: "ผู้ช่วยท่าหลวงฯ", college: "วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์",
     newChat: "เริ่มคุยใหม่", newShort: "คุยใหม่",
     popular: "คำถามยอดนิยม", popularHint: "คำถามยอดนิยม — แตะถามได้เลย",
-    phone: "โทร 0-3628-1295", phoneNote: "ข้อมูลไม่ครบ ติดต่อเจ้าหน้าที่ได้เลยค่ะ",
+    phone: "โทร 0-3628-1295", phoneNote: "ข้อมูลไม่ครบ ติดต่อเจ้าหน้าที่ได้เลยครับ",
     hello: "อยากรู้อะไรเกี่ยวกับ<em>ท่าหลวงฯ</em>ดี?",
-    sub: "แตะไมค์เพื่อพูด หรือพิมพ์ถามได้เลยค่ะ 😊", subNoMic: "พิมพ์คำถามด้านล่างได้เลยค่ะ 😊",
-    placeholder: "ถามอะไรก็ได้เกี่ยวกับวิทยาลัย…", listening: "กำลังฟัง… พูดได้เลยค่ะ (แตะไมค์เพื่อหยุด)",
+    sub: "แตะไมค์เพื่อพูด หรือพิมพ์ถามได้เลยครับ 😊", subNoMic: "พิมพ์คำถามด้านล่างได้เลยครับ 😊",
+    placeholder: "ถามอะไรก็ได้เกี่ยวกับวิทยาลัย…", listening: "กำลังฟัง… พูดได้เลยครับ (แตะไมค์เพื่อหยุด)",
     send: "ส่ง", mic: "กดเพื่อพูด", replay: "ฟังอีกครั้ง", theme: "สลับโหมดมืด/สว่าง",
     cMap: "แผนผังวิทยาลัย", cPrograms: "สาขาที่เปิดสอน", cApply: "คุณสมบัติผู้สมัคร",
     cContact: "ช่องทางติดต่อ", cTrips: "ที่เที่ยวสระบุรี", cSouvenir: "ของฝากสระบุรี",
-    hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะคะ",
+    hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะครับ",
     spoken: "🎤 พูด", mapAlt: "แผนผังวิทยาลัย",
-    mapMsg: "นี่คือแผนผังวิทยาลัยค่ะ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
-    sysErr: "ขออภัยค่ะ ระบบขัดข้อง ลองใหม่อีกครั้งนะคะ",
-    noHear: "ไม่ได้ยินค่ะ ลองพูดใหม่ หรือพิมพ์คำถามดูนะคะ 🙏",
-    menuPick: "เลือกหมวดได้เลยค่ะ 👇", menuItems: "แตะดูรายละเอียดได้เลยค่ะ 👇",
+    mapMsg: "นี่คือแผนผังวิทยาลัยครับ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
+    sysErr: "ขออภัยครับ ระบบขัดข้อง ลองใหม่อีกครั้งนะครับ",
+    noHear: "ไม่ได้ยินครับ ลองพูดใหม่ หรือพิมพ์คำถามดูนะครับ 🙏",
+    menuPick: "เลือกหมวดได้เลยครับ 👇", menuItems: "แตะดูรายละเอียดได้เลยครับ 👇",
     back: "ย้อนกลับ", home: "หน้าแรก", districtPre: "อ.",
-    greet: "สวัสดีค่ะ หนูชื่อทีแอลบอท มีอะไรให้ช่วยไหมคะ",
-    rateAsk: "คำตอบนี้ช่วยได้ไหมคะ?", rateThanks: "ขอบคุณที่ให้คะแนนค่ะ 🙏", starUnit: "ดาว",
-    attractSub: "สวัสดีค่ะ หนูชื่อทีแอลบอท ผู้ช่วยตอบคำถามของวิทยาลัย", attractTap: "👆 แตะจอเพื่อถามหุ่นยนต์",
+    greet: "สวัสดีครับ ผมชื่อทีแอลบอท มีอะไรให้ช่วยไหมครับ",
+    rateAsk: "คำตอบนี้ช่วยได้ไหมครับ?", rateThanks: "ขอบคุณที่ให้คะแนนครับ 🙏", starUnit: "ดาว",
+    attractSub: "สวัสดีครับ ผมชื่อทีแอลบอท ผู้ช่วยตอบคำถามของวิทยาลัย", attractTap: "👆 แตะจอเพื่อถามหุ่นยนต์",
     announceTag: "ประกาศ",
-    states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีค่ะ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
+    states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีครับ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
   },
   en: {
@@ -269,8 +269,11 @@ function speak(text, speakLang, onEnd) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = code;
   const voices = window.speechSynthesis.getVoices().filter((v) => v.lang && v.lang.toLowerCase().startsWith(code.slice(0, 2)));
-  const voice = voices.find((v) => /หญิง|female|woman|kanya|narisa|samantha|zira|aria|jenny/i.test(v.name)) || voices[0];
+  // หุ่นเป็นผู้ชาย: หาเสียงผู้ชายก่อน (Windows: Pattara / Edge: Niwat) — male ไม่ติดคำว่า female
+  const male = voices.find((v) => /ชาย|male|man|pattara|niwat|david|guy|mark|ryan|christopher/i.test(v.name));
+  const voice = male || voices[0];
   if (voice) u.voice = voice;
+  if (!male) u.pitch = 0.75;   // ไม่มีเสียงผู้ชายในเครื่อง → กดเสียงให้ทุ้มลง
   u.onend = () => onEnd && onEnd();
   u.onerror = () => onEnd && onEnd();
   window.speechSynthesis.speak(u);
