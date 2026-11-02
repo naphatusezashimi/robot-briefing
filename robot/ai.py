@@ -11,6 +11,7 @@ from config import (
     ANTHROPIC_API_KEY,
     CLAUDE_MODEL,
     GEMINI_API_KEYS,
+    GEMINI_FALLBACK_MODELS,
     GEMINI_MODEL,
 )
 from database import format_all_data
@@ -89,6 +90,16 @@ def _gemini_config(college_data: dict, saraburi_data: dict, lang: str):
     )
 
 
+def is_busy_error(e: Exception) -> bool:
+    msg = str(e)
+    return any(s in msg for s in ("UNAVAILABLE", "503", "DEADLINE_EXCEEDED", "504")) or "overloaded" in msg.lower()
+
+
+def _model_not_for_key(e: Exception) -> bool:
+    # เช่น key ใหม่ใช้ gemini-2.5-flash ไม่ได้แล้ว (404 NOT_FOUND)
+    return "NOT_FOUND" in str(e) or "404" in str(e)
+
+
 def _keys_in_order():
     """ไล่ key เริ่มจากตัวที่ใช้อยู่ วนครบทุกตัว 1 รอบ: คืน (index, key)"""
     keys = GEMINI_API_KEYS or [""]
@@ -97,42 +108,56 @@ def _keys_in_order():
         yield idx, keys[idx]
 
 
+def _try_gemini(call):
+    """ลองถาม Gemini แบบไม่ยอมแพ้ง่าย ๆ:
+    - โควตา key หมด / key ใช้โมเดลนี้ไม่ได้ → ลอง key ถัดไป
+    - โมเดลล่มหรือคนใช้เยอะ (ทุก key เจอเหมือนกัน) → ข้ามไปโมเดลสำรอง
+    call(client, model, idx) ต้อง yield ข้อความ; ถ้าตอบไปแล้วบางส่วนแล้วพัง จะส่ง error ตามจริง"""
+    errors = []
+    for model in [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]:
+        for idx, key in _keys_in_order():
+            started = False
+            try:
+                for piece in call(_gemini_client(key), model, idx):
+                    started = True
+                    yield piece
+                return
+            except Exception as e:
+                if started:
+                    raise
+                errors.append(e)
+                if is_busy_error(e):
+                    break          # โมเดลนี้ล่มทั้งระบบ → โมเดลถัดไป
+                if not (is_quota_error(e) or _model_not_for_key(e)):
+                    raise
+    # ล้มหมดทุกทาง: ถ้ามีเรื่องโควตาให้แจ้งโควตา ไม่งั้นแจ้ง error ล่าสุด
+    raise next((e for e in errors if is_quota_error(e)), errors[-1])
+
+
 def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
-    global _gemini_idx
     config = _gemini_config(college_data, saraburi_data, lang)
-    last = None
-    for idx, key in _keys_in_order():
-        try:
-            response = _gemini_client(key).models.generate_content(model=GEMINI_MODEL, contents=question, config=config)
-            _gemini_idx = idx
-            return (response.text or "").strip()
-        except Exception as e:
-            if not is_quota_error(e):
-                raise
-            last = e   # โควตา key นี้หมด → ลอง key ถัดไป
-    raise last
+
+    def call(client, model, idx):
+        global _gemini_idx
+        response = client.models.generate_content(model=model, contents=question, config=config)
+        _gemini_idx = idx
+        yield (response.text or "").strip()
+
+    return "".join(_try_gemini(call))
 
 
 def _stream_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
-    global _gemini_idx
     config = _gemini_config(college_data, saraburi_data, lang)
-    last = None
-    for idx, key in _keys_in_order():
-        started = False
-        try:
-            for chunk in _gemini_client(key).models.generate_content_stream(model=GEMINI_MODEL, contents=question, config=config):
-                if chunk.text:
-                    started = True
-                    _gemini_idx = idx
-                    yield chunk.text
-            _gemini_idx = idx
-            return
-        except Exception as e:
-            # ตอบไปแล้วบางส่วน สลับ key กลางประโยคไม่ได้ → ส่ง error ตามจริง
-            if started or not is_quota_error(e):
-                raise
-            last = e
-    raise last
+
+    def call(client, model, idx):
+        global _gemini_idx
+        for chunk in client.models.generate_content_stream(model=model, contents=question, config=config):
+            if chunk.text:
+                _gemini_idx = idx
+                yield chunk.text
+        _gemini_idx = idx
+
+    yield from _try_gemini(call)
 
 
 def _claude_args(question: str, college_data: dict, saraburi_data: dict, lang: str):

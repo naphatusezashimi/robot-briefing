@@ -4,22 +4,28 @@ import pytest
 import ai
 import config
 
+BUSY, NOT_FOUND = set(), set()
+
 
 class FakeModels:
     def __init__(self, key, log, quota_keys):
         self.key, self.log, self.quota_keys = key, log, quota_keys
 
-    def _check(self):
+    def _check(self, model):
         self.log.append(self.key)
         if self.key in self.quota_keys:
             raise RuntimeError("429 RESOURCE_EXHAUSTED quota exceeded")
+        if model in BUSY:
+            raise RuntimeError("503 UNAVAILABLE high demand")
+        if (self.key, model) in NOT_FOUND:
+            raise RuntimeError("404 NOT_FOUND model not available")
 
-    def generate_content(self, **kw):
-        self._check()
+    def generate_content(self, model, **kw):
+        self._check(model)
         return type("R", (), {"text": f"ตอบจาก {self.key}"})()
 
-    def generate_content_stream(self, **kw):
-        self._check()
+    def generate_content_stream(self, model, **kw):
+        self._check(model)
         yield type("C", (), {"text": f"ตอบจาก {self.key}"})()
 
 
@@ -28,6 +34,9 @@ def fake(monkeypatch):
     log, quota = [], set()
     monkeypatch.setattr(ai, "GEMINI_API_KEYS", ["k1", "k2", "k3"])
     monkeypatch.setattr(ai, "_gemini_idx", 0)
+    monkeypatch.setattr(ai, "GEMINI_MODEL", "main")
+    monkeypatch.setattr(ai, "GEMINI_FALLBACK_MODELS", ["backup"])
+    BUSY.clear(); NOT_FOUND.clear()
     monkeypatch.setattr(ai, "_gemini_config", lambda *a: None)
     monkeypatch.setattr(ai, "_gemini_client", lambda key: type("Cl", (), {"models": FakeModels(key, log, quota)})())
     return log, quota
@@ -72,3 +81,16 @@ def test_other_errors_do_not_switch_key(fake, monkeypatch):
     monkeypatch.setattr(ai, "_gemini_client", boom)
     with pytest.raises(ValueError):
         ai._ask_gemini("q", {}, {})
+
+
+def test_busy_model_falls_back_to_backup_model(fake):
+    log, _ = fake
+    BUSY.add("main")
+    assert ai._ask_gemini("q", {}, {}) == "ตอบจาก k1"
+    assert log == ["k1", "k1"]   # ลอง main ครั้งเดียวแล้วข้ามไป backup ทันที (ไม่ไล่ทุก key)
+
+
+def test_model_not_for_key_tries_next_key(fake):
+    _, _ = fake
+    NOT_FOUND.add(("k1", "main"))
+    assert list(ai._stream_gemini("q", {}, {})) == ["ตอบจาก k2"]
