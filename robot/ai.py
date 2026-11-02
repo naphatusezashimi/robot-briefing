@@ -12,6 +12,7 @@ from config import (
     CLAUDE_MODEL,
     GEMINI_API_KEYS,
     GEMINI_FALLBACK_MODELS,
+    AI_TIMEOUT_SECONDS,
     GEMINI_TTS_MODELS,
     GEMINI_TTS_VOICE,
     GEMINI_MODEL,
@@ -64,8 +65,8 @@ _gemini_clients = {}   # key -> client
 _gemini_idx = 0        # key ที่ใช้อยู่ตอนนี้ (โควตาหมดแล้วเลื่อนไปตัวถัดไป)
 
 
-def _system_text(college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
-    return _rules(lang) + "\n\n" + format_all_data(college_data, saraburi_data)
+def _system_text(college_data: dict, saraburi_data: dict, lang: str = "th", question: str = None) -> str:
+    return _rules(lang) + "\n\n" + format_all_data(college_data, saraburi_data, question=question)
 
 
 def is_quota_error(e: Exception) -> bool:
@@ -80,21 +81,26 @@ def _gemini_client(key: str):
     return _gemini_clients[key]
 
 
-def _gemini_config(college_data: dict, saraburi_data: dict, lang: str):
+def _gemini_config(college_data: dict, saraburi_data: dict, lang: str, question: str = None):
     from google.genai import types
 
     return types.GenerateContentConfig(
-        system_instruction=_system_text(college_data, saraburi_data, lang),
+        # แนบ SAR เฉพาะส่วนที่เกี่ยวกับคำถาม (RAG) — ข้อมูลน้อยลง AI อ่านเร็วขึ้น
+        system_instruction=_system_text(college_data, saraburi_data, lang, question=question),
         max_output_tokens=AI_MAX_TOKENS,
         temperature=0.2,
         # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
         thinking_config=types.ThinkingConfig(thinking_budget=0),
+        # รอโมเดลนี้ไม่เกิน AI_TIMEOUT_SECONDS แล้วข้ามไปโมเดลสำรอง — และไม่ให้ไลบรารีลองซ้ำเองเงียบ ๆ (เคยทำให้รอเกือบนาที)
+        http_options=types.HttpOptions(timeout=int(AI_TIMEOUT_SECONDS * 1000),
+                                       retry_options=types.HttpRetryOptions(attempts=1)),
     )
 
 
 def is_busy_error(e: Exception) -> bool:
-    msg = str(e)
-    return any(s in msg for s in ("UNAVAILABLE", "503", "DEADLINE_EXCEEDED", "504")) or "overloaded" in msg.lower()
+    msg = str(e).lower()
+    return (any(s in msg for s in ("unavailable", "503", "deadline_exceeded", "504", "overloaded", "timed out", "timeout"))
+            or type(e).__name__.endswith("Timeout"))
 
 
 def _model_not_for_key(e: Exception) -> bool:
@@ -110,14 +116,31 @@ def _keys_in_order():
         yield idx, keys[idx]
 
 
+# (โมเดล, key) ที่โควตาหมด/ใช้ไม่ได้ → เวลาที่จะลองใหม่ — ข้ามไปเลย ไม่ต้องเสียเวลาลองทุกคำถาม
+# (เคยเจอ: โควตารายวันหมดทั้ง 11 key ทุกคำถามเสียเวลาไล่ลองฟรี ๆ ราว 8 วินาที)
+_skip_until = {}
+QUOTA_COOLDOWN = 5 * 60          # โควตารายนาทีหมด → พัก 5 นาที
+DAILY_QUOTA_COOLDOWN = 60 * 60   # โควตารายวันหมด → พัก 1 ชั่วโมง (ลองใหม่เผื่อรีเซ็ตแล้ว)
+NOT_FOUND_COOLDOWN = 6 * 60 * 60
+
+
+def _cooldown_for(e: Exception) -> float:
+    if _model_not_for_key(e):
+        return NOT_FOUND_COOLDOWN
+    return DAILY_QUOTA_COOLDOWN if "PerDay" in str(e) else QUOTA_COOLDOWN
+
+
 def _try_gemini(call, models=None):
     """ลองถาม Gemini แบบไม่ยอมแพ้ง่าย ๆ:
-    - โควตา key หมด / key ใช้โมเดลนี้ไม่ได้ → ลอง key ถัดไป
+    - โควตา key หมด / key ใช้โมเดลนี้ไม่ได้ → ลอง key ถัดไป (และจำไว้ ข้ามไปช่วงหนึ่ง)
     - โมเดลล่มหรือคนใช้เยอะ (ทุก key เจอเหมือนกัน) → ข้ามไปโมเดลสำรอง
     call(client, model, idx) ต้อง yield ข้อความ; ถ้าตอบไปแล้วบางส่วนแล้วพัง จะส่ง error ตามจริง"""
+    import time
     errors = []
     for model in models or [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]:
         for idx, key in _keys_in_order():
+            if _skip_until.get((model, key), 0) > time.time():
+                continue
             started = False
             try:
                 for piece in call(_gemini_client(key), model, idx):
@@ -132,16 +155,19 @@ def _try_gemini(call, models=None):
                     break          # โมเดลนี้ล่มทั้งระบบ → โมเดลถัดไป
                 if not (is_quota_error(e) or _model_not_for_key(e)):
                     raise
+                _skip_until[(model, key)] = time.time() + _cooldown_for(e)
     # ล้มหมดทุกทาง: ถ้ามีเรื่องโควตาให้แจ้งโควตา ไม่งั้นแจ้ง error ล่าสุด
+    if not errors:   # ทุก key ยังพักอยู่ (เพิ่งเจอโควตาหมด)
+        raise RuntimeError("429 RESOURCE_EXHAUSTED (ทุก key ยังพักโควตาอยู่)")
     raise next((e for e in errors if is_quota_error(e)), errors[-1])
 
 
 def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
-    config = _gemini_config(college_data, saraburi_data, lang)
+    config = _gemini_config(college_data, saraburi_data, lang, question)
 
     def call(client, model, idx):
         global _gemini_idx
-        response = client.models.generate_content(model=model, contents=question, config=config)
+        response =client.models.generate_content(model=model, contents=question, config=config)
         _gemini_idx = idx
         yield (response.text or "").strip()
 
@@ -149,7 +175,7 @@ def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: st
 
 
 def _stream_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
-    config = _gemini_config(college_data, saraburi_data, lang)
+    config = _gemini_config(college_data, saraburi_data, lang, question)
 
     def call(client, model, idx):
         global _gemini_idx

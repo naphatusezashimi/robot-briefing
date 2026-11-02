@@ -37,7 +37,8 @@ AI_MAX_TOKENS = 800
 CLAUDE_MODEL = "claude-sonnet-4-6"
 GEMINI_MODEL = "gemini-3.5-flash"
 # โมเดลหลักล่ม/คนใช้เยอะ → ลองโมเดลสำรองตามลำดับ (gemini-2.5-flash ใช้ได้เฉพาะ key เก่า)
-GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash"]
+GEMINI_FALLBACK_MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"]
+AI_TIMEOUT_SECONDS = 20   # รอโมเดลหนึ่งนานสุดเท่านี้ แล้วข้ามไปโมเดลสำรอง
 
 # --- เสียงพูดของหุ่น: Gemini TTS (เสียงผู้ชายเป็นธรรมชาติ) ---
 # False = ใช้เสียงในเครื่อง (Web Speech) อย่างเดียว / สร้างเสียงไม่ทันหรือโควตาหมด หุ่นใช้เสียงในเครื่องแทนเอง
@@ -60,6 +61,10 @@ AUDIO_OUT = "answer.wav"
 COLLEGE_DATA_PATH = "college_data.json"
 SARABURI_DATA_PATH = "saraburi_data.json"
 # ข้อมูลจากรายงาน SAR ปีการศึกษา 2568 (สรุป + คำถาม-คำตอบ 266 ข้อ) — ตัดส่วนข้อมูลภายในออกแล้ว
+# ส่ง SAR ให้ AI เฉพาะส่วนที่เกี่ยวกับคำถาม ไม่เกินเท่านี้ตัวอักษร (ทั้งไฟล์ ~64,000 — ส่งหมดทุกครั้งตอบช้าเท่าตัว)
+SAR_BUDGET_CHARS = 9000
+# คำถามเดิมที่เคยตอบแล้ว ตอบซ้ำจากที่จำไว้ได้ทันที ไม่ต้องถาม AI ใหม่ (วินาที, 0 = ปิด)
+ANSWER_CACHE_SECONDS = 6 * 60 * 60
 SAR_DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sar_2568.md")
 
 # --- ตั้งค่าเว็บ (เฟสกล่องพูดได้) ---

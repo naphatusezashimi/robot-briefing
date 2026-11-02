@@ -30,6 +30,7 @@ from gpio_btn import GpioButton                                # noqa: E402
 from arm import Arm                                            # noqa: E402
 from stats import Stats                                        # noqa: E402
 from announce import load_announcements, due_announcements    # noqa: E402
+from answer_cache import AnswerCache, replay_pieces            # noqa: E402
 from datetime import datetime                                  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -46,6 +47,9 @@ button_queue: queue.Queue = queue.Queue()
 _gpio = GpioButton(button_queue)
 arm = Arm()
 stats = Stats(ROBOT_DIR / config.STATS_DB_PATH)
+# คำถามที่เคยตอบแล้ว ตอบซ้ำได้ทันที (แก้ไฟล์ข้อมูลเมื่อไหร่ คำตอบเก่าใช้ไม่ได้เอง)
+answers = AnswerCache(config.ANSWER_CACHE_SECONDS, data_files=[
+    ROBOT_DIR / config.COLLEGE_DATA_PATH, ROBOT_DIR / config.SARABURI_DATA_PATH, config.SAR_DATA_PATH])
 _now = datetime.now   # แยกไว้ให้เทสต์แกล้งเปลี่ยนเวลาได้
 
 
@@ -126,7 +130,10 @@ def ask():
     stats.log_question(question, lang)
     state["value"] = "thinking"
     try:
-        answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+        answer = answers.get(question, lang)
+        if answer is None:
+            answer = ask_ai(question, college_data, saraburi_data, lang=lang)   # สมองเดิม — กฎกันตอบมั่วอยู่ในนี้
+            answers.put(question, lang, answer)
         state["value"] = "answering"
         result = {"answer": answer, "photos": []}
         if wants_map(question):
@@ -180,11 +187,15 @@ def ask_stream():
         line = lambda obj: json.dumps(obj, ensure_ascii=False) + "\n"   # noqa: E731
         pieces = []
         try:
-            for piece in ask_ai_stream(question, college_data, saraburi_data, lang=lang):
+            cached = answers.get(question, lang)
+            source = replay_pieces(cached) if cached else ask_ai_stream(question, college_data, saraburi_data, lang=lang)
+            for piece in source:
                 state["value"] = "answering"
                 pieces.append(piece)
                 yield line({"t": piece})
             state["value"] = "answering"
+            if not cached:
+                answers.put(question, lang, "".join(pieces))   # ตอบครบแล้วค่อยจำ (ขาดกลางทางไม่จำ)
             # หารูปจากคำตอบที่ต่อครบแล้ว (ชื่อสถานที่อาจถูกตัดคร่อมสองท่อน)
             photos = [] if image else photos_for(question, "".join(pieces), saraburi_data, lang=lang)
             yield line({"done": True, "image": image, "photos": photos})

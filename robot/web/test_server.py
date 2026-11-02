@@ -13,6 +13,7 @@ def temp_stats(tmp_path, monkeypatch):
     """ทุกเทสต์ใช้ฐานสถิติชั่วคราว ไม่เขียนลง robot/stats.db ตัวจริง"""
     st = Stats(tmp_path / "stats.db")
     monkeypatch.setattr(server, "stats", st)
+    server.answers.clear()   # คำตอบที่จำไว้ของเทสต์ก่อน ไม่ให้ปนกัน
     return st
 
 
@@ -633,3 +634,37 @@ def test_screen_uses_ai_voice_with_local_fallback():
     js = make_client().get("/static/screen.js").data.decode("utf-8")
     assert "/tts?lang=" in js and "localSpeak" in js and "TTS_TIMEOUT_MS" in js
     assert "startAttract()" in js   # เปิดหน้าเว็บมาเข้าโหมดรอ
+
+
+# ---- จำคำตอบ: ถามซ้ำตอบได้ทันที ไม่ถาม AI ใหม่ ----
+def test_repeat_question_answered_from_cache(monkeypatch):
+    calls = []
+
+    def fake_stream(q, c_, s, lang="th"):
+        calls.append(q)
+        yield "มีสาขา"
+        yield "ยานยนต์ไฟฟ้าครับ"
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "ask_ai_stream", fake_stream)
+    c = make_client()
+    first = c.post("/ask/stream", json={"question": "มีสาขายานยนต์ไฟฟ้าไหม"}).get_data(as_text=True)
+    again = c.post("/ask/stream", json={"question": "มีสาขายานยนต์ไฟฟ้าไหมครับ ?"}).get_data(as_text=True)
+    assert calls == ["มีสาขายานยนต์ไฟฟ้าไหม"]   # ครั้งที่สองไม่ถาม AI (ต่างแค่ "ครับ ?")
+    text = lambda out: "".join(_json.loads(l).get("t", "") for l in out.splitlines() if l.strip())   # noqa: E731
+    assert text(first) == text(again) == "มีสาขายานยนต์ไฟฟ้าครับ"
+    assert sum(t["count"] for t in server.stats.summary()["top"]) == 2   # ตอบจากที่จำไว้ก็ยังนับสถิติ
+
+
+def test_failed_answer_is_not_cached(monkeypatch):
+    calls = []
+
+    def flaky(q, c_, s, lang="th"):
+        calls.append(q)
+        yield "ครึ่ง"
+        raise RuntimeError("503 UNAVAILABLE")
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "ask_ai_stream", flaky)
+    c = make_client()
+    c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
+    c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
+    assert len(calls) == 2
