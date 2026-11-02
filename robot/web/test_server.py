@@ -553,3 +553,83 @@ def test_announcements_due(tmp_path, monkeypatch):
     assert [a["text"] for a in d["due"]] == ["สวัสดีตอนเช้าค่ะ"]
     monkeypatch.setattr(server, "_now", lambda: datetime(2026, 11, 2, 9, 0, 5))
     assert make_client().get("/announcements/due").get_json()["due"] == []
+
+
+# ---- /tts: เสียงพูด AI ----
+@pytest.fixture
+def tts_env(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(server.config, "TTS_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(server.config, "AI_VOICE", True)
+    monkeypatch.setattr(server.config, "VOICE_ENGINE", "edge")
+
+    def fake_edge(text, lang):
+        calls.append((text, lang))
+        yield b"ID3"
+        yield b"mp3data"
+    monkeypatch.setattr(server, "edge_mp3_stream", fake_edge)
+    return calls
+
+
+def test_tts_streams_mp3_and_caches(tts_env):
+    c = make_client()
+    r = c.get("/tts", query_string={"text": "สวัสดีครับ", "lang": "th"})
+    assert r.status_code == 200 and r.mimetype == "audio/mpeg" and r.get_data() == b"ID3mp3data"
+    r2 = c.get("/tts", query_string={"text": "สวัสดีครับ", "lang": "th"})
+    assert r2.status_code == 200 and r2.get_data() == b"ID3mp3data"
+    assert tts_env == [("สวัสดีครับ", "th")]   # ครั้งที่สองใช้ไฟล์ที่เก็บไว้ ไม่สร้างซ้ำ
+
+
+def test_tts_rejects_empty_or_too_long(tts_env):
+    c = make_client()
+    assert c.get("/tts", query_string={"text": ""}).status_code == 400
+    assert c.get("/tts", query_string={"text": "ก" * 601}).status_code == 400
+
+
+def test_tts_edge_failure_returns_503(tts_env, monkeypatch):
+    def broken(text, lang):
+        raise ConnectionError("no internet")
+        yield b""
+    monkeypatch.setattr(server, "edge_mp3_stream", broken)
+    assert make_client().get("/tts", query_string={"text": "สวัสดี"}).status_code == 503
+
+
+def test_tts_disabled_by_config(tts_env, monkeypatch):
+    monkeypatch.setattr(server.config, "AI_VOICE", False)
+    assert make_client().get("/tts", query_string={"text": "สวัสดี"}).status_code == 404
+
+
+def test_tts_gemini_engine_quota_cools_down(tts_env, monkeypatch):
+    monkeypatch.setattr(server.config, "VOICE_ENGINE", "gemini")
+    monkeypatch.setattr(server.config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(server, "_tts_off_until", 0.0)
+    hits = []
+
+    def boom(text, lang):
+        hits.append(text)
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+    monkeypatch.setattr(server, "speak_wav", boom)
+    c = make_client()
+    assert c.get("/tts", query_string={"text": "หนึ่ง"}).status_code == 503
+    assert c.get("/tts", query_string={"text": "สอง"}).status_code == 503
+    assert hits == ["หนึ่ง"]
+
+
+def test_gemini_voice_gets_only_the_text(monkeypatch):
+    import ai
+    seen = []
+
+    class Models:
+        def generate_content_stream(self, model, contents, config):
+            seen.append(contents)
+            part = type("P", (), {"inline_data": type("D", (), {"data": b"\x00\x00"})()})()
+            yield type("C", (), {"candidates": [type("X", (), {"content": type("Y", (), {"parts": [part]})()})()]})()
+    monkeypatch.setattr(ai, "_gemini_client", lambda key: type("Cl", (), {"models": Models()})())
+    assert b"".join(ai.speak_pcm_stream("สวัสดีครับ", "th")) == b"\x00\x00"
+    assert seen == ["สวัสดีครับ"]   # ไม่มีคำสั่งนำหน้า (เคยโดนอ่านออกเสียง)
+
+
+def test_screen_uses_ai_voice_with_local_fallback():
+    js = make_client().get("/static/screen.js").data.decode("utf-8")
+    assert "/tts?lang=" in js and "localSpeak" in js and "TTS_TIMEOUT_MS" in js
+    assert "startAttract()" in js   # เปิดหน้าเว็บมาเข้าโหมดรอ

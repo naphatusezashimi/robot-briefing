@@ -39,6 +39,17 @@ GEMINI_MODEL = "gemini-3.5-flash"
 # โมเดลหลักล่ม/คนใช้เยอะ → ลองโมเดลสำรองตามลำดับ (gemini-2.5-flash ใช้ได้เฉพาะ key เก่า)
 GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash"]
 
+# --- เสียงพูดของหุ่น: Gemini TTS (เสียงผู้ชายเป็นธรรมชาติ) ---
+# False = ใช้เสียงในเครื่อง (Web Speech) อย่างเดียว / สร้างเสียงไม่ทันหรือโควตาหมด หุ่นใช้เสียงในเครื่องแทนเอง
+AI_VOICE = True
+VOICE_ENGINE = "edge"   # "edge" = Microsoft Niwat (เร็ว 2–3 วิ ฟรี) / "gemini" = Gemini TTS (ธรรมชาติกว่า แต่ช้า 6–19 วิ กินโควตา)
+EDGE_TTS_VOICE = "th-TH-NiwatNeural"   # เสียงผู้ชายไทย (ภาษาอังกฤษใช้ EDGE_TTS_VOICE_EN)
+EDGE_TTS_VOICE_EN = "en-US-GuyNeural"
+EDGE_TTS_RATE = "+10%"   # ความเร็วพูด: "+0%" = ปกติ, "+20%" = เร็วขึ้น, "-10%" = ช้าลง
+GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-2.5-flash-preview-tts"]
+GEMINI_TTS_VOICE = "Puck"   # เสียงผู้ชาย ร่าเริง (อื่น ๆ: Charon, Fenrir, Orus)
+TTS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tts_cache")   # เสียงที่เคยสร้าง เก็บไว้ใช้ซ้ำ
+
 # --- ตั้งค่าเสียง (เฟส 2) ---
 RECORD_SECONDS = 5
 SAMPLE_RATE = 16000

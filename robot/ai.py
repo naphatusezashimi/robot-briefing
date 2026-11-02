@@ -12,6 +12,8 @@ from config import (
     CLAUDE_MODEL,
     GEMINI_API_KEYS,
     GEMINI_FALLBACK_MODELS,
+    GEMINI_TTS_MODELS,
+    GEMINI_TTS_VOICE,
     GEMINI_MODEL,
 )
 from database import format_all_data
@@ -108,13 +110,13 @@ def _keys_in_order():
         yield idx, keys[idx]
 
 
-def _try_gemini(call):
+def _try_gemini(call, models=None):
     """ลองถาม Gemini แบบไม่ยอมแพ้ง่าย ๆ:
     - โควตา key หมด / key ใช้โมเดลนี้ไม่ได้ → ลอง key ถัดไป
     - โมเดลล่มหรือคนใช้เยอะ (ทุก key เจอเหมือนกัน) → ข้ามไปโมเดลสำรอง
     call(client, model, idx) ต้อง yield ข้อความ; ถ้าตอบไปแล้วบางส่วนแล้วพัง จะส่ง error ตามจริง"""
     errors = []
-    for model in [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]:
+    for model in models or [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]:
         for idx, key in _keys_in_order():
             started = False
             try:
@@ -158,6 +160,53 @@ def _stream_gemini(question: str, college_data: dict, saraburi_data: dict, lang:
         _gemini_idx = idx
 
     yield from _try_gemini(call)
+
+
+# ---- เสียงพูด: Gemini TTS ----
+# ส่งเฉพาะข้อความที่จะพูด — ห้ามใส่คำสั่งนำหน้า (เช่น "พูดด้วยน้ำเสียง…") เพราะโมเดลจะอ่านคำสั่งออกเสียงด้วย
+# ความร่าเริงมาจากตัวเสียง (GEMINI_TTS_VOICE) อยู่แล้ว
+TTS_SAMPLE_RATE = 24000   # เสียงที่ได้: PCM 16-bit โมโน 24kHz
+
+
+def _tts_config():
+    from google.genai import types
+    return types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=GEMINI_TTS_VOICE))),
+    )
+
+
+def speak_pcm_stream(text: str, lang: str = "th"):
+    """ข้อความ → เสียง PCM ทยอยส่งเป็นท่อน ๆ (ได้ท่อนแรกเร็ว เริ่มเล่นได้ก่อนสร้างเสร็จทั้งประโยค)"""
+    config = _tts_config()
+
+    def call(client, model, idx):
+        for chunk in client.models.generate_content_stream(model=model, contents=text, config=config):
+            try:
+                data = chunk.candidates[0].content.parts[0].inline_data.data
+            except (AttributeError, IndexError, TypeError):
+                data = None
+            if data:
+                yield data
+
+    yield from _try_gemini(call, models=GEMINI_TTS_MODELS)
+
+
+def pcm_to_wav(pcm: bytes) -> bytes:
+    import io
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(TTS_SAMPLE_RATE)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+def speak_wav(text: str, lang: str = "th") -> bytes:
+    return pcm_to_wav(b"".join(speak_pcm_stream(text, lang)))
 
 
 def _claude_args(question: str, college_data: dict, saraburi_data: dict, lang: str):
