@@ -29,3 +29,12 @@ def test_sar_2568_included_without_internal_sections():
     assert "จุดที่ควรพัฒนาและแผนปี 2569 (ข้อมูลภายใน)" not in sar
     assert "ข้อความที่ขัดกัน" not in sar
     assert "รายงาน SAR ปีการศึกษา 2568" in format_all_data({}, {})
+
+
+def test_programs_follow_sar_2568():
+    progs = load_college_data()["หลักสูตรที่เปิดสอน"]
+    pvc = [k for k in progs["ปวช"] if not k.startswith("_")]
+    pvs = [k for k in progs["ปวส"] if not k.startswith("_")]
+    assert len(pvc) == 13 and len(pvs) == 13
+    assert "ยานยนต์ไฟฟ้า" in pvc and "เมคคาทรอนิกส์และหุ่นยนต์" in pvs
+    assert "สาขาวิชาเครื่องมือกลและซ่อมบำรุง" not in progs["ปวช"]   # ชื่อเดิมจากเว็บไซต์
