@@ -10,7 +10,7 @@ from config import (
     AI_MAX_TOKENS,
     ANTHROPIC_API_KEY,
     CLAUDE_MODEL,
-    GEMINI_API_KEY,
+    GEMINI_API_KEYS,
     GEMINI_MODEL,
 )
 from database import format_all_data
@@ -30,6 +30,9 @@ _SYSTEM_RULES = (
     "ปิดท้ายด้วยประโยคชวนคุยสั้น ๆ เช่น ถามว่าอยากรู้เรื่องไหนเพิ่มไหมครับ "
     "ตอบโดยอ้างอิงจากข้อมูลวิทยาลัยและข้อมูลจังหวัดสระบุรีที่ให้ไว้เท่านั้น "
     "ห้ามแต่งหรือคาดเดาข้อมูลที่ไม่มีในฐานข้อมูลเด็ดขาด "
+    "ข้อมูลวิทยาลัยมี 2 แหล่ง: ฐานข้อมูลจากเว็บไซต์ (ช่องทางติดต่อ การรับสมัคร) และรายงาน SAR ปีการศึกษา 2568 (สถิติ ผลงาน รางวัล ประวัติ) "
+    "ถ้าตอบด้วยตัวเลขจาก SAR ให้บอกว่าเป็นข้อมูลปีการศึกษา 2568 "
+    "ถ้าสองแหล่งขัดกัน ให้ใช้ข้อมูลเว็บไซต์เรื่องการติดต่อ/รับสมัคร และใช้ SAR เรื่องสถิติและผลงาน "
     "ถ้าไม่มีข้อมูลในส่วนที่ถาม ให้ตอบว่า 'ขออภัย ยังไม่มีข้อมูลในส่วนนี้' "
     "และแนะนำให้ติดต่อเจ้าหน้าที่วิทยาลัยโดยตรง (โทร 0-3628-1295)"
 )
@@ -53,43 +56,82 @@ _NO_QUESTION = "ขออภัยครับ ไม่ได้ยินคำ
 
 # clients สร้างแบบ lazy — สร้างเฉพาะเจ้าที่ใช้จริง จะได้ไม่ error เพราะ key อีกเจ้าว่าง
 _claude_client = None
-_gemini_client = None
+_gemini_clients = {}   # key -> client
+_gemini_idx = 0        # key ที่ใช้อยู่ตอนนี้ (โควตาหมดแล้วเลื่อนไปตัวถัดไป)
 
 
 def _system_text(college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
     return _rules(lang) + "\n\n" + format_all_data(college_data, saraburi_data)
 
 
-def _gemini(college_data: dict, saraburi_data: dict, lang: str):
-    """คืน (client, config) ที่ใช้ร่วมกันทั้งแบบตอบทีเดียวและแบบทยอยตอบ"""
-    global _gemini_client
-    if _gemini_client is None:
-        from google import genai
-        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+def is_quota_error(e: Exception) -> bool:
+    msg = str(e)
+    return "RESOURCE_EXHAUSTED" in msg or "429" in msg or "rate_limit" in msg
 
+
+def _gemini_client(key: str):
+    if key not in _gemini_clients:
+        from google import genai
+        _gemini_clients[key] = genai.Client(api_key=key)
+    return _gemini_clients[key]
+
+
+def _gemini_config(college_data: dict, saraburi_data: dict, lang: str):
     from google.genai import types
 
-    config = types.GenerateContentConfig(
+    return types.GenerateContentConfig(
         system_instruction=_system_text(college_data, saraburi_data, lang),
         max_output_tokens=AI_MAX_TOKENS,
         temperature=0.2,
         # ปิดโหมดคิดก่อนตอบ — ไม่งั้นมันกิน token จนคำตอบโดนตัด
         thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
-    return _gemini_client, config
+
+
+def _keys_in_order():
+    """ไล่ key เริ่มจากตัวที่ใช้อยู่ วนครบทุกตัว 1 รอบ: คืน (index, key)"""
+    keys = GEMINI_API_KEYS or [""]
+    for i in range(len(keys)):
+        idx = (_gemini_idx + i) % len(keys)
+        yield idx, keys[idx]
 
 
 def _ask_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th") -> str:
-    client, config = _gemini(college_data, saraburi_data, lang)
-    response = client.models.generate_content(model=GEMINI_MODEL, contents=question, config=config)
-    return (response.text or "").strip()
+    global _gemini_idx
+    config = _gemini_config(college_data, saraburi_data, lang)
+    last = None
+    for idx, key in _keys_in_order():
+        try:
+            response = _gemini_client(key).models.generate_content(model=GEMINI_MODEL, contents=question, config=config)
+            _gemini_idx = idx
+            return (response.text or "").strip()
+        except Exception as e:
+            if not is_quota_error(e):
+                raise
+            last = e   # โควตา key นี้หมด → ลอง key ถัดไป
+    raise last
 
 
 def _stream_gemini(question: str, college_data: dict, saraburi_data: dict, lang: str = "th"):
-    client, config = _gemini(college_data, saraburi_data, lang)
-    for chunk in client.models.generate_content_stream(model=GEMINI_MODEL, contents=question, config=config):
-        if chunk.text:
-            yield chunk.text
+    global _gemini_idx
+    config = _gemini_config(college_data, saraburi_data, lang)
+    last = None
+    for idx, key in _keys_in_order():
+        started = False
+        try:
+            for chunk in _gemini_client(key).models.generate_content_stream(model=GEMINI_MODEL, contents=question, config=config):
+                if chunk.text:
+                    started = True
+                    _gemini_idx = idx
+                    yield chunk.text
+            _gemini_idx = idx
+            return
+        except Exception as e:
+            # ตอบไปแล้วบางส่วน สลับ key กลางประโยคไม่ได้ → ส่ง error ตามจริง
+            if started or not is_quota_error(e):
+                raise
+            last = e
+    raise last
 
 
 def _claude_args(question: str, college_data: dict, saraburi_data: dict, lang: str):
