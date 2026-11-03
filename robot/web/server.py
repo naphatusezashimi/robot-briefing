@@ -30,6 +30,7 @@ from gpio_btn import GpioButton                                # noqa: E402
 from arm import Arm                                            # noqa: E402
 from stats import Stats                                        # noqa: E402
 from announce import load_announcements, due_announcements    # noqa: E402
+from qr import load_qr_codes, resolve as resolve_qr            # noqa: E402
 from answer_cache import AnswerCache, replay_pieces            # noqa: E402
 from datetime import datetime                                  # noqa: E402
 
@@ -359,6 +360,21 @@ def announcements_due():
     """ประกาศที่ถึงเวลาในนาทีนี้ — จอเนื้อหาถามทุก ~15 วินาที แล้วจำ id ที่พูดไปแล้ว"""
     items = load_announcements(ROBOT_DIR / config.ANNOUNCEMENTS_PATH)
     return jsonify(due=due_announcements(items, _now()))
+
+
+@app.get("/qr")
+def qr():
+    """รหัสจากเครื่องสแกน QR → {"label", "question"} (จอส่งต่อให้ /ask/stream) หรือ {"label", "answer"} (พูดเลย)
+    ไม่รู้จักรหัส → 404 — อ่านไฟล์ใหม่ทุกครั้ง แก้ qr_codes.json แล้วมีผลเลย"""
+    lang = request.args.get("lang") if request.args.get("lang") in LANGS else "th"
+    code = request.args.get("code", "")
+    hit = resolve_qr(code, load_qr_codes(ROBOT_DIR / config.QR_CODES_PATH), lang)
+    if not hit:
+        print(f"[qr] ไม่รู้จักรหัส {code!r}", flush=True)   # ไว้ดูว่า QR ไหนยังไม่ได้ใส่ในไฟล์
+        return jsonify(error="unknown"), 404
+    if "answer" in hit:   # คำตอบตายตัวไม่ผ่าน /ask จึงนับสถิติที่นี่
+        stats.log_question(f"[QR] {hit['label']}", lang)
+    return jsonify(**hit)
 
 
 @app.get("/menu")

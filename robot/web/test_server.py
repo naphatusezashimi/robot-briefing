@@ -668,3 +668,30 @@ def test_failed_answer_is_not_cached(monkeypatch):
     c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
     c.post("/ask/stream", json={"question": "ห้องสมุดอยู่ไหน"}).get_data()
     assert len(calls) == 2
+
+
+# ---------- สแกน QR ----------
+def qr_file(tmp_path, monkeypatch, data):
+    import json
+    p = tmp_path / "qr.json"
+    p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(server.config, "QR_CODES_PATH", str(p))   # ROBOT_DIR / ไฟล์แบบ absolute = ไฟล์นั้น
+
+
+def test_qr_question_code(tmp_path, monkeypatch):
+    qr_file(tmp_path, monkeypatch, {"TL-A": {"ชื่อ": "ห้อง A", "คำถาม": "ห้อง A อยู่ไหน", "คำถามอังกฤษ": "Where is A?"}})
+    c = make_client()
+    assert c.get("/qr?code=tl-a").get_json() == {"label": "ห้อง A", "question": "ห้อง A อยู่ไหน"}
+    assert c.get("/qr?code=TL-A&lang=en").get_json()["question"] == "Where is A?"
+
+
+def test_qr_fixed_answer_is_counted_in_stats(tmp_path, monkeypatch, temp_stats):
+    qr_file(tmp_path, monkeypatch, {"TL-B": {"ชื่อ": "ทดสอบ", "คำตอบ": "ใช้ได้"}})
+    r = make_client().get("/qr?code=TL-B")
+    assert r.get_json() == {"label": "ทดสอบ", "answer": "ใช้ได้"}
+    assert [r[0] for r in temp_stats._conn.execute("SELECT question FROM questions")] == ["[QR] ทดสอบ"]
+
+
+def test_qr_unknown_code_404(tmp_path, monkeypatch):
+    qr_file(tmp_path, monkeypatch, {})
+    assert make_client().get("/qr?code=WHAT").status_code == 404

@@ -25,6 +25,7 @@ const T = {
     rateAsk: "คำตอบนี้ช่วยได้ไหมครับ?", rateThanks: "ขอบคุณที่ให้คะแนนครับ 🙏", starUnit: "ดาว",
     attractSub: "สวัสดีครับ ผมชื่อทีแอลบอท ผู้ช่วยตอบคำถามของวิทยาลัย", attractTap: "👆 แตะจอเพื่อถามหุ่นยนต์",
     announceTag: "ประกาศ",
+    scanned: "📷 สแกน QR", qrUnknown: "ยังไม่รู้จัก QR นี้ครับ 🙏 ลองถามด้วยเสียงหรือพิมพ์ดูนะครับ",
     stopTalk: "⏹ หยุดพูด", seeScreen: "รายละเอียดเพิ่มเติมดูบนจอได้เลยครับ",
     states: { idle: "พร้อมรับคำถาม", greeting: "สวัสดีครับ 👋", listening: "กำลังฟัง…", thinking: "กำลังคิด…", answering: "กำลังตอบ", error: "เกิดข้อผิดพลาด" },
     speech: "th-TH",
@@ -51,6 +52,7 @@ const T = {
     rateAsk: "Was this answer helpful?", rateThanks: "Thanks for rating! 🙏", starUnit: "stars",
     attractSub: "Hi! I'm TL-Bot, the college's question assistant.", attractTap: "👆 Tap the screen to ask the robot",
     announceTag: "Announcement",
+    scanned: "📷 QR scan", qrUnknown: "Sorry, I don't recognise this QR code 🙏 Try asking by voice or typing.",
     stopTalk: "⏹ Stop", seeScreen: "More details are on the screen.",
     states: { idle: "Ready", greeting: "Hello! 👋", listening: "Listening…", thinking: "Thinking…", answering: "Answering", error: "Error" },
     speech: "en-US",
@@ -187,7 +189,8 @@ function addMsg(role, text, opts = {}) {
   const m = document.createElement("div");
   m.className = "msg " + role;
   if (role === "user") {
-    m.innerHTML = (opts.voice ? '<span class="mic-tag">' + t().spoken + "</span>" : "") + escapeHtml(text);
+    const tag = opts.qr ? t().scanned : opts.voice ? t().spoken : "";
+    m.innerHTML = (tag ? '<span class="mic-tag">' + tag + "</span>" : "") + escapeHtml(text);
   } else {
     m.innerHTML = AVA + '<div class="a-body"></div>';
     renderBot(m, text, { ...opts, done: true });
@@ -387,7 +390,7 @@ async function ask(question, opts = {}) {
   stopAnswer();   // ยังอ่านคำตอบเก่าอยู่ → หยุดก่อนถามข้อใหม่
   const askLang = lang, myConvo = convo;
   const stale = () => myConvo !== convo;
-  addMsg("user", question, { voice: !!opts.voice });
+  addMsg("user", question, { voice: !!opts.voice, qr: !!opts.qr });
   setState("thinking"); typing(true);
   const fail = (msg) => {
     if (stale()) return;
@@ -506,6 +509,59 @@ composer.addEventListener("submit", (e) => {
   ask(q, { voice: false });
 });
 input.addEventListener("input", () => composer.classList.toggle("has-text", input.value.trim() !== ""));
+
+// ---- เครื่องสแกน QR (USB แบบคีย์บอร์ด) ----
+// เครื่องสแกน "พิมพ์" รหัสรัวมาก แล้วกด Enter เอง — คนพิมพ์ไม่เร็วขนาดนี้ จึงแยกออกจากการพิมพ์ปกติได้
+// อ่านจากปุ่มจริงที่กด (e.code) ไม่ใช่ตัวอักษร (e.key) → เครื่องตั้งคีย์บอร์ดเป็นภาษาไทยอยู่ก็อ่านรหัสถูก
+const SCAN_GAP_MS = 60, SCAN_MIN_LEN = 3;   // ห่างกันเกิน 60ms = ไม่ใช่เครื่องสแกน
+const SCAN_PUNCT = { Minus: "-_", Equal: "=+", BracketLeft: "[{", BracketRight: "]}", Backslash: "\\|",
+  Semicolon: ";:", Quote: "'\"", Backquote: "`~", Comma: ",<", Period: ".>", Slash: "/?", Space: "  ",
+  NumpadSubtract: "--", NumpadAdd: "++", NumpadMultiply: "**", NumpadDivide: "//", NumpadDecimal: ".." };
+function scanChar(code, shift, caps) {
+  let m;
+  if ((m = /^Key([A-Z])$/.exec(code))) return shift !== caps ? m[1] : m[1].toLowerCase();
+  if ((m = /^Digit(\d)$/.exec(code))) return shift ? ")!@#$%^&*("[m[1]] : m[1];
+  if ((m = /^Numpad(\d)$/.exec(code))) return m[1];
+  const p = SCAN_PUNCT[code];
+  return p ? p[shift ? 1 : 0] : "";
+}
+let scanBuf = "", scanLast = 0, scanSnap = null;
+document.addEventListener("keydown", (e) => {
+  const now = performance.now();
+  if (now - scanLast > SCAN_GAP_MS || e.repeat) {   // เริ่มชุดใหม่: จำข้อความในช่องพิมพ์ไว้ก่อนรหัสจะไหลเข้าไป
+    scanBuf = "";
+    scanSnap = document.activeElement === input ? input.value : null;
+  }
+  scanLast = now;
+  if (e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter") {
+    const code = scanBuf; scanBuf = "";
+    if (code.length < SCAN_MIN_LEN) return;   // Enter ของคนพิมพ์ → ส่งคำถามตามปกติ
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (scanSnap !== null) { input.value = scanSnap; composer.classList.toggle("has-text", scanSnap.trim() !== ""); }
+    onScan(code.trim());
+    return;
+  }
+  if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) { scanBuf = ""; return; }
+  scanBuf += scanChar(e.code, e.shiftKey, !!(e.getModifierState && e.getModifierState("CapsLock")));
+}, true);
+
+// รหัสใน qr_codes.json → ส่งเป็นคำถามให้ AI (ได้รูป/แผนผังเหมือนถามเอง) หรือพูดคำตอบตายตัวเลย
+function onScan(code) {
+  if (attractOn) stopAttract();
+  if (busy() || announcing) return;
+  if (recog && listening) { recog.stop(); listening = false; }
+  fetch("/qr?code=" + encodeURIComponent(code) + "&lang=" + lang)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d) { stopAnswer(); addMsg("bot", t().qrUnknown, { warn: true }); return; }
+      if (d.question) { ask(d.question, { qr: true }); return; }
+      stopAnswer();
+      addMsg("user", d.label, { qr: true });
+      addMsg("bot", d.answer);
+      setState("answering"); speakAnswer(d.answer, lang);
+    })
+    .catch(() => addMsg("bot", t().sysErr, { warn: true }));
+}
 
 // ---- คำถามยอดนิยม: ต้นฉบับอยู่ใน #quickQs คัดลอกไปแถบซ้ายและแถวเหนือช่องถาม ----
 document.querySelectorAll("#quickQs .chip").forEach((chip) => {

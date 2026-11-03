@@ -86,6 +86,7 @@ IDLE_VIDEO_SECONDS = 90   # ไม่มีใครแตะจอนานเ�
 
 # --- สถิติ (คำถาม + ดาว 1–5) และประกาศตามเวลา ---
 STATS_DB_PATH = "stats.db"                    # ไฟล์ SQLite ใน robot/ (ไม่ขึ้น git)
+QR_CODES_PATH = "qr_codes.json"               # รหัส QR → คำถาม/คำตอบ แก้ไฟล์นี้แล้วมีผลเลย
 ANNOUNCEMENTS_PATH = "announcements.json"     # รายการประกาศ แก้ไฟล์นี้แล้วมีผลเลย
 
 # --- แขนโบกมือ: เซอร์โว MG996R ต่อบอร์ด PCA9685 (I2C) ---
