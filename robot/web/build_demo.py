@@ -25,7 +25,7 @@ def _relative(text: str) -> str:
 def build(out: Path) -> None:
     out = Path(out)
     (out / "static").mkdir(parents=True, exist_ok=True)
-    for f in ("logo.jpg", "map.jpg"):
+    for f in ("logo.jpg", "map.jpg", "campus_tour.html"):
         shutil.copy2(STATIC / f, out / "static" / f)
     shutil.copytree(STATIC / "places", out / "static" / "places", dirs_exist_ok=True)
     for js in ("screen.js", "face.js"):

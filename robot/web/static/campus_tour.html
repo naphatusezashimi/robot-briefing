@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>3D Campus Tour – วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1724;--panel:rgba(12,20,34,.82);--line:rgba(255,255,255,.14);--acc:#ffb020;--txt:#f4f7fb;--mut:#a9b6c8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Kanit',system-ui,sans-serif;color:var(--txt)}
+  #stage{position:fixed;inset:0}
+  #stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #overlay{pointer-events:none}
+  .bar{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;align-items:flex-start;justify-content:space-between;pointer-events:none;z-index:5}
+  .brand{pointer-events:auto;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:8px 12px;max-width:min(62vw,440px)}
+  .brand b{display:block;font-weight:600;font-size:14px;line-height:1.25}
+  .brand span{font-size:11px;color:var(--mut)}
+  .ctrls{pointer-events:auto;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:56vw}
+  button{font-family:inherit;font-size:13px;color:var(--txt);background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+  button:hover{border-color:rgba(255,255,255,.35)}
+  button.primary{background:linear-gradient(135deg,#ff8a00,#ffb020);color:#1a1200;border:none;font-weight:600}
+  button.rec{border-color:#ff4d4f}
+  button.rec.on{background:#d7263d;border-color:#d7263d;animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.7}}
+  #drawer{position:fixed;top:64px;right:10px;width:min(300px,86vw);max-height:calc(100% - 200px);overflow:auto;background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;padding:8px;z-index:6;display:none}
+  #drawer.open{display:block}
+  #drawer h4{font-size:12px;color:var(--mut);font-weight:400;margin:8px 6px 4px}
+  .stop{display:flex;gap:8px;align-items:center;padding:6px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1.2}
+  .stop:hover,.stop.cur{background:rgba(255,255,255,.08)}
+  .stop i{flex:none;width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-style:normal;font-weight:700;font-size:13px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+  #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;z-index:9;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+  #toast.show{opacity:1}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:20;font-size:15px;color:var(--mut)}
+  .prog{position:fixed;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.08);z-index:5}
+  .prog div{height:100%;width:0;background:var(--acc);transition:width .2s linear}
+  /* บนหุ่น: ซ่อนปุ่มบันทึกวิดีโอ (ไม่ให้ไฟล์ไปกองในเครื่องหุ่น) */
+  #bRec{display:none}
+  @media (max-width:640px){
+    .brand b{font-size:12px}.brand span{font-size:10px}
+    button{font-size:12px;padding:7px 9px}
+  }
+</style>
+</head>
+<body>
+<div id="loading">กำลังสร้างฉาก 3 มิติ…</div>
+<div id="stage"><canvas id="overlay"></canvas></div>
+
+<div class="bar">
+  <div class="brand"><b>วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</b><span>Interactive 3D Campus Tour · ลากเพื่อหมุน · หยิก/สกอลล์เพื่อซูม</span></div>
+  <div class="ctrls">
+    <button class="primary" id="bPlay">▶ เริ่มเล่นวิดีโอทัวร์</button>
+    <button id="bPrev" title="ก่อนหน้า">⏮</button>
+    <button id="bNext" title="ถัดไป">⏭</button>
+    <button id="bSpeed" title="ความเร็ว">1×</button>
+    <button class="rec" id="bRec">● บันทึกวิดีโอ</button>
+    <button id="bList">☰ สถานที่</button>
+  </div>
+</div>
+<div id="drawer"></div>
+<div id="toast"></div>
+<div class="prog"><div id="progFill"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+const FONT = "'Kanit', system-ui, sans-serif";
+const S = 0.1;                                   // 1 map pixel = 0.1 world unit
+const MX = 400, MY = 270;                        // map origin
+const W = (px,py)=>new THREE.Vector3((px-MX)*S,0,(py-MY)*S);
+
+/* ---------------- DATA: 27 points (+ football field) taken from the campus map ---------------- */
+const PL = [
+ {c:'G',n:'ป้อมยาม',u:['จุดตรวจและซุ้มประตูทางเข้าหลัก','ติดถนนพัฒนพงศ์'],t:'gate',px:345,py:158,col:'#cfe3ea'},
+ {c:'H',n:'องค์พระวิษณุกรรม',u:['ศาลองค์พระวิษณุกรรม บรมครูแห่งการช่าง'],t:'shrine',px:322,py:206,col:'#f2a65a'},
+ {c:'I',n:'เสาธง',u:['ลานเสาธงหน้าอาคาร 7','พื้นที่กิจกรรมหน้าเสาธง'],t:'flag',px:357,py:197,col:'#9aa7b5'},
+ {c:'J',n:'ป้ายประชาสัมพันธ์',u:['ป้ายข่าวสารและประชาสัมพันธ์ของวิทยาลัย'],t:'sign',px:373,py:226,a:-0.35,col:'#ffffff'},
+ {c:'K',n:'ที่จอดรถยนต์',u:['ลานจอดรถยนต์ด้านหน้าวิทยาลัย'],t:'parking',px:340,py:243,w:40,d:42,a:-0.25,col:'#c9c9c9'},
+ {c:'1',n:'อาคาร 1',u:['ห้องเรียนประเภทวิชาสามัญสัมพันธ์','คณะวิชาสามัญสัมพันธ์','งานพยาบาล'],t:'bld',px:492,py:243,w:192,d:24,h:3.4,a:-0.25,col:'#e53935'},
+ {c:'2',n:'อาคาร 2',u:['ห้องเรียนประเภทวิชาสามัญสัมพันธ์','งานพัสดุ'],t:'bld',px:500,py:318,w:110,d:30,h:2.8,a:-0.12,col:'#f1c9d0'},
+ {c:'3',n:'อาคาร 3',u:['สาขาวิชาเมคคาทรอนิกส์และหุ่นยนต์','สาขาวิชาเทคนิคพื้นฐาน'],t:'bld',px:520,py:356,w:92,d:20,h:2.4,a:-0.15,col:'#c8642a'},
+ {c:'4',n:'อาคารเอนกประสงค์',u:['โรงอาหาร','หอประชุมอดิเรกสาร'],t:'bld',px:584,py:298,w:42,d:84,h:3.2,a:-0.12,col:'#a9b7d6',hall:true},
+ {c:'5',n:'อาคารช่างอุตสาหกรรม',u:['สาขาวิชาไฟฟ้ากำลัง','สาขาวิชาเทคนิคการผลิต','สาขาวิชาเทคนิคอุตสาหกรรม'],t:'bld',px:340,py:330,w:80,d:38,h:2.6,a:-0.12,col:'#f6e733'},
+ {c:'6',n:'อาคารจอดรถส่วนกลาง',u:['งานอาคารสถานที่','อาคารจอดรถส่วนกลาง'],t:'garage',px:660,py:184,w:50,d:22,h:2.2,a:0,col:'#7d9a3c'},
+ {c:'7',n:'อาคาร 7',u:['ฝ่ายแผนงานและความร่วมมือ','ฝ่ายพัฒนากิจการนักเรียนนักศึกษา','สาขาวิชาอิเล็กทรอนิกส์','สาขาวิชาเทคโนโลยีคอมพิวเตอร์','สาขาวิชาเทคโนโลยีสารสนเทศ'],t:'bld',px:430,py:213,w:112,d:24,h:3.2,a:-0.25,col:'#7fbfd6'},
+ {c:'8',n:'อาคาร 8',u:['อาคารอำนวยการ','สาขาวิชาการบัญชี','สาขาวิชาคอมพิวเตอร์ธุรกิจ','สาขาวิชาการตลาด'],t:'bld',px:345,py:286,w:100,d:24,h:2.8,a:-0.28,col:'#e8873a'},
+ {c:'9',n:'อาคาร 9',u:['สาขาวิชายานยนต์ไฟฟ้า'],t:'bld',px:606,py:352,w:56,d:24,h:2.0,a:-0.1,col:'#dfe5ee'},
+ {c:'L',n:'อาคารงานการค้า',u:['งานการค้า (ติดอาคาร 5)'],t:'bld',px:389,py:305,w:22,d:30,h:2.0,a:-0.12,col:'#f0caca'},
+ {c:'M',n:'สหการวิทยาลัย',u:['ร้านสหการวิทยาลัย'],t:'bld',px:411,py:323,w:17,d:15,h:1.6,a:-0.12,col:'#8fa6c8'},
+ {c:'N',n:'สาขาวิชาโลหะการ',u:['โรงฝึกงานสาขาวิชาโลหะการ'],t:'bld',px:425,py:358,w:30,d:34,h:2.2,a:-0.12,col:'#f6c39a',shed:true},
+ {c:'O',n:'โดมเอนกประสงค์ วีระพล อดิเรกสาร',u:['โดมกีฬาและกิจกรรมเอนกประสงค์','ข้างสนามฟุตบอล'],t:'dome',px:286,py:238,w:46,d:108,a:-0.22,col:'#4a72c4'},
+ {c:'P',n:'อาคารศูนย์วิทยบริการ',u:['ศูนย์วิทยบริการ (ห้องสมุด)','งานเอกสารการพิมพ์'],t:'bld',px:596,py:214,w:34,d:20,h:2.4,a:-0.25,col:'#f3ec55'},
+ {c:'Q',n:'ศูนย์บ่มเพาะวิสาหกิจเพื่อการศึกษา',u:['ร้านค้าศูนย์บ่มเพาะวิสาหกิจเพื่อการศึกษา','งานแนะแนวอาชีพและการจัดหางาน','งานอาชีวศึกษาระบบทวิภาคี','ศูนย์บ่มเพาะวิสาหกิจเพื่อการศึกษา','ธนาคารโรงเรียน'],t:'shops',px:458,py:290,w:84,d:14,h:1.3,a:-0.18,col:'#f5c842'},
+ {c:'R',n:'อาคารปฏิบัติงานสาขาวิชาเทคนิคอุตสาหกรรม',u:['โรงฝึกปฏิบัติงานสาขาวิชาเทคนิคอุตสาหกรรม'],t:'bld',px:285,py:312,w:24,d:18,h:1.8,a:-0.28,col:'#7a2e22',shed:true},
+ {c:'⚽',n:'สนามฟุตบอล',u:['สนามฟุตบอลหลักของวิทยาลัย','พื้นที่สีเขียวขนาดใหญ่ฝั่งซ้าย'],t:'field',px:172,py:284,w:220,d:160,a:-0.12,col:'#5fae3e'},
+ {c:'E',n:'สนามบาสเก็ตบอล',u:['สนามบาสเก็ตบอลกลางแจ้ง'],t:'court',px:256,py:370,w:66,d:30,a:-0.15,col:'#2f9be0'},
+ {c:'F',n:'สนามเทนนิส',u:['สนามเทนนิสกลางแจ้ง'],t:'tennis',px:188,py:391,w:62,d:30,a:-0.15,col:'#b8a5d8'},
+ {c:'A',n:'บ้านพักครู (บ้านเดี่ยว)',u:['กลุ่มบ้านพักครูแบบบ้านเดี่ยว','โซนขวาบนติดสระน้ำ'],t:'houses',col:'#b9a8d8',
+   list:[[700,183],[721,183],[742,183],[762,183],[667,229],[688,229],[709,229]],hs:[17,19,1.4]},
+ {c:'B',n:'บ้านพักครู (ตึกแถว)',u:['กลุ่มบ้านพักครูแบบตึกแถว','โซนขวาสุดของวิทยาลัย'],t:'rows',col:'#e7975e',
+   list:[[700,328,32,19,-0.25],[741,314,32,19,-0.25],[778,272,30,22,-0.3],[803,206,20,58,0]]},
+ {c:'C',n:'บ้านพักครู (แฟลต)',u:['แฟลตบ้านพักครู'],t:'bld',px:110,py:182,w:60,d:22,h:3.6,a:-0.3,col:'#d08b86',flat:true},
+ {c:'D',n:'บ้านพักเจ้าหน้าที่',u:['บ้านพักเจ้าหน้าที่','พนักงานขับรถ','นักการ'],t:'houses',col:'#d46a58',
+   list:[[33,231],[53,225],[73,218]],hs:[16,22,1.5]}
+];
+const ORDER = ['G','H','I','J','K','1','2','3','4','5','6','7','8','9','L','M','N','O','P','Q','R','⚽','E','F','A','B','C','D'];
+const byCode = Object.fromEntries(PL.map(p=>[p.c,p]));
+
+/* ---------------- helpers ---------------- */
+const $ = id=>document.getElementById(id);
+const tmpC = new THREE.Color();
+function shade(hex,k){tmpC.set(hex);const c=tmpC.clone();return k>0?c.lerp(new THREE.Color('#ffffff'),k):c.lerp(new THREE.Color('#000000'),-k);}
+function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function toast(msg,ms=2600){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),ms);}
+function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function canvasTex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;}
+
+/* ---------------- renderer / scene ---------------- */
+const stage=$('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+stage.insertBefore(renderer.domElement,stage.firstChild);
+const scene=new THREE.Scene();
+scene.background=canvasTex(4,256,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#6fb3ff');gr.addColorStop(.55,'#bfe0ff');gr.addColorStop(1,'#ffe9cc');g.fillStyle=gr;g.fillRect(0,0,w,h);});
+scene.background.encoding=THREE.sRGBEncoding;
+scene.fog=new THREE.Fog(0xd8e9f7,170,420);
+const camera=new THREE.PerspectiveCamera(42,1,0.3,600);
+camera.position.set(0,80,90);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.dampingFactor=.08;controls.maxPolarAngle=1.42;controls.minDistance=6;controls.maxDistance=180;
+
+scene.add(new THREE.HemisphereLight(0xdcefff,0x6c8a4a,0.75));
+const sun=new THREE.DirectionalLight(0xffefd2,1.25);
+sun.position.set(55,48,30);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-60,right:60,top:45,bottom:-45,near:1,far:200});
+sun.shadow.bias=-0.0006;sun.shadow.normalBias=0.03;
+scene.add(sun);
+
+/* ---------------- materials / textures ---------------- */
+const winTex=canvasTex(128,128,(g,w,h)=>{g.fillStyle='#ffffff';g.fillRect(0,0,w,h);
+  g.fillStyle='#e9edf2';g.fillRect(0,h*0.86,w,h*0.14);
+  for(const x of [10,70]){const gr=g.createLinearGradient(x,0,x+48,0);gr.addColorStop(0,'#3d5a78');gr.addColorStop(.6,'#6f93b5');gr.addColorStop(1,'#3d5a78');g.fillStyle=gr;g.fillRect(x,22,48,56);g.fillStyle='rgba(255,255,255,.55)';g.fillRect(x+23,22,2,56);}
+});
+winTex.wrapS=winTex.wrapT=THREE.RepeatWrapping;winTex.encoding=THREE.sRGBEncoding;
+const std=(o)=>new THREE.MeshStandardMaterial(Object.assign({roughness:.85,metalness:0},o));
+const matCache={};
+function M(hex,o){const k=hex+JSON.stringify(o||{});return matCache[k]||(matCache[k]=std(Object.assign({color:hex},o)));}
+function shadowAll(obj){obj.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true;}});return obj;}
+
+/* ---------------- ground, roads, water ---------------- */
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(700,700),M('#86b45a'));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+function polyShape(pts){const s=new THREE.Shape();pts.forEach(([px,py],i)=>{const v=W(px,py);i?s.lineTo(v.x,-v.z):s.moveTo(v.x,-v.z);});return s;}
+function flat(pts,color,y){const m=new THREE.Mesh(new THREE.ShapeGeometry(polyShape(pts)),M(color));m.rotation.x=-Math.PI/2;m.position.y=y;m.receiveShadow=true;scene.add(m);return m;}
+// campus ground (paved / lawn)
+flat([[8,214],[300,149],[600,149],[600,388],[560,388],[150,420]],'#d9d3c3',0.02);
+flat([[612,149],[813,149],[813,340],[612,392]],'#d9d3c3',0.02);
+// lawns
+flat([[330,150],[470,150],[470,205],[380,225],[345,212]],'#c0c4c4',0.04); // front plaza (grey on map)
+flat([[400,282],[590,240],[596,252],[404,296]],'#8fc45a',0.05);           // green strip between 1 & 2
+flat([[612,200],[800,196],[800,250],[612,262]],'#9ccc6a',0.04);
+flat([[612,262],[790,250],[780,300],[612,345]],'#95c562',0.04);
+// pond
+const pond=flat([[600,148],[813,148],[813,165],[700,168],[640,172],[618,196],[600,200]],'#3aa6e8',0.06);
+pond.material=std({color:'#3aa6e8',roughness:.15,metalness:.1});
+// roads
+const roadMat=M('#5b5f66');const innerRoadMat=M('#8a8d92');
+function road(a,b,wd,mat,y){const A=W(...a),B=W(...b);const len=A.distanceTo(B);const m=new THREE.Mesh(new THREE.PlaneGeometry(len,wd),mat);m.rotation.x=-Math.PI/2;m.rotation.z=-Math.atan2(B.z-A.z,B.x-A.x);m.position.set((A.x+B.x)/2,y||0.07,(A.z+B.z)/2);m.receiveShadow=true;scene.add(m);return m;}
+road([-700,136],[1500,136],2.8,roadMat,0.08);
+// dashed center line on Phatthanaphong road
+for(let x=-650;x<1450;x+=40){road([x,136],[x+20,136],0.18,M('#ffffff'),0.09);}
+// kerbs
+road([-700,121.5],[1500,121.5],0.25,M('#eeeeee'),0.085);road([-700,150.5],[1500,150.5],0.25,M('#eeeeee'),0.085);
+[[[345,150],[400,276]],[[400,276],[600,233]],[[418,344],[640,314]],[[600,150],[600,392]],[[612,150],[612,392]],
+ [[40,214],[300,156]],[[45,222],[135,398]],[[135,398],[308,362]],[[308,362],[328,205]],[[328,205],[300,156]],
+ [[612,205],[795,203]],[[795,203],[795,330]],[[612,290],[790,252]],[[400,276],[420,345]],[[365,262],[400,276]]]
+ .forEach(([a,b])=>road(a,b,1.3,innerRoadMat,0.075));
+
+/* ---------------- label sprites ---------------- */
+const labelSprites=[];
+function makeLabel(p){
+  const c=document.createElement('canvas');const g=c.getContext('2d');
+  g.font=`600 46px ${FONT}`;const tw=g.measureText(p.n).width;
+  const badge=p.c.length>1?96:80;c.width=Math.ceil(tw+badge+60);c.height=104;
+  g.font=`600 46px ${FONT}`;
+  g.shadowColor='rgba(0,0,0,.35)';g.shadowBlur=10;g.shadowOffsetY=3;
+  g.fillStyle='rgba(255,255,255,.96)';rrect(g,6,8,c.width-12,86,22);g.fill();g.shadowColor='transparent';
+  g.fillStyle=p.col;rrect(g,14,16,badge,70,16);g.fill();
+  g.fillStyle=tmpC.set(p.col).getHSL({}).l>0.7?'#1b2433':'#ffffff';
+  g.textAlign='center';g.textBaseline='middle';g.font=`700 44px ${FONT}`;g.fillText(p.c,14+badge/2,53);
+  g.fillStyle='#1b2433';g.textAlign='left';g.font=`600 46px ${FONT}`;g.fillText(p.n,badge+30,54);
+  const tex=new THREE.CanvasTexture(c);tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,sizeAttenuation:false}));
+  sp.renderOrder=10;const hgt=0.034;sp.userData.base=new THREE.Vector2(hgt*c.width/c.height,hgt);sp.scale.set(sp.userData.base.x,hgt,1);
+  sp.center.set(0.5,0);return sp;
+}
+function textSprite(txt,size,bg){const c=document.createElement('canvas');const g=c.getContext('2d');g.font=`600 ${size}px ${FONT}`;const w=g.measureText(txt).width;c.width=w+48;c.height=size*1.8;
+  g.fillStyle=bg;rrect(g,0,0,c.width,c.height,c.height/2);g.fill();g.fillStyle='#fff';g.font=`600 ${size}px ${FONT}`;g.textBaseline='middle';g.fillText(txt,24,c.height/2+2);
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true}));const h=2;s.scale.set(h*c.width/c.height,h,1);return s;}
+
+/* ---------------- builders ---------------- */
+function wallMats(col,w,d,h,opt){
+  const wall=shade(col,opt&&opt.dark?0.15:0.5);const roof=new THREE.Color(col);
+  const floors=Math.max(1,Math.round(h/1.0));
+  const mk=(len)=>{const t=winTex.clone();t.needsUpdate=true;t.repeat.set(Math.max(1,Math.round(len/1.4)),floors);return std({color:wall,map:t,roughness:.7});};
+  const sx=mk(d),sz=mk(w);const top=std({color:roof,roughness:.6});const bot=M('#777');
+  return [sx,sx,top,bot,sz,sz];
+}
+function box(w,h,d,mat){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.y=h/2;return m;}
+function placeGroup(g,p){const v=W(p.px,p.py);g.position.copy(v);g.rotation.y=-(p.a||0);scene.add(shadowAll(g));return g;}
+
+function buildBuilding(p){
+  const g=new THREE.Group();const w=p.w*S,d=p.d*S,h=p.h;
+  const b=box(w,h,d,wallMats(p.col,w,d,h,{dark:p.col==='#7a2e22'}));g.add(b);
+  // roof parapet / accent
+  const par=box(w+.2,.18,d+.2,M(shade(p.col,-0.15).getStyle()));par.position.y=h+.09;g.add(par);
+  if(p.shed){ // gable roof workshop
+    const r=new THREE.Mesh(new THREE.CylinderGeometry(d*.62,d*.62,w,3,1,false),std({color:shade(p.col,-0.2)}));r.rotation.z=Math.PI/2;r.rotation.x=Math.PI/2*0+Math.PI/6;r.position.y=h+d*.22;r.scale.set(1,1,.45);g.add(r);
+  }
+  if(p.hall){ // assembly hall barrel roof
+    const r=new THREE.Mesh(new THREE.CylinderGeometry(w*.5,w*.5,d,24,1,false,0,Math.PI),std({color:shade(p.col,-0.25),roughness:.5}));r.rotation.z=Math.PI/2;r.rotation.y=Math.PI/2;r.position.y=h;r.scale.set(.35,1,1);
+    r.rotation.set(0,0,0);r.rotation.x=Math.PI/2;r.rotation.z=Math.PI/2;g.add(r);
+  }
+  if(p.flat){ // balconies
+    for(let i=1;i<4;i++){const bl=box(w*.96,.08,.35,M('#f3eee8'));bl.position.set(0,i*0.9,d/2+.17);g.add(bl);}
+  }
+  // entrance canopy
+  const can=box(Math.min(2.4,w*.3),.12,1.0,M('#f4f4f4'));can.position.set(0,1.0,d/2+.5);g.add(can);
+  return {g,top:h+(p.hall?w*.18:p.shed?d*.3:0.2)};
+}
+function buildDome(p){
+  const g=new THREE.Group();const w=p.w*S,d=p.d*S;
+  const base=box(w,1.1,d,wallMats('#9fb5e6',w,d,1.1));g.add(base);
+  const r=new THREE.Mesh(new THREE.CylinderGeometry(w/2,w/2,d,40,1,true,0,Math.PI),std({color:p.col,roughness:.35,metalness:.25,side:THREE.DoubleSide}));
+  r.rotation.x=Math.PI/2;r.rotation.y=Math.PI/2;r.rotation.set(Math.PI/2,0,Math.PI/2);
+  // orient: axis along z (length d), arc on top
+  const geo=new THREE.CylinderGeometry(w/2,w/2,d,40,1,true,-Math.PI/2,Math.PI);geo.rotateX(Math.PI/2);
+  const roof=new THREE.Mesh(geo,std({color:p.col,roughness:.35,metalness:.2,side:THREE.DoubleSide}));roof.position.y=1.1;roof.scale.y=.75;g.add(roof);
+  // ribs
+  for(let i=-4;i<=4;i++){const rib=new THREE.Mesh(new THREE.TorusGeometry(w/2,.06,6,24,Math.PI),M('#dde6ff'));rib.position.set(0,1.1,i*d/9);rib.scale.y=.75;g.add(rib);}
+  const capF=new THREE.Mesh(new THREE.CircleGeometry(w/2,32,0,Math.PI),std({color:'#cfe0ff',transparent:true,opacity:.85,side:THREE.DoubleSide}));
+  capF.position.set(0,1.1,d/2);capF.scale.y=.75;g.add(capF);const capB=capF.clone();capB.position.z=-d/2;g.add(capB);
+  return {g,top:1.1+w/2*.75};
+}
+function buildField(p){
+  const w=p.w*S,d=p.d*S;const g=new THREE.Group();
+  const tex=canvasTex(1024,750,(c,W2,H)=>{for(let i=0;i<12;i++){c.fillStyle=i%2?'#58a83a':'#63b545';c.fillRect(i*W2/12,0,W2/12,H);}
+    c.strokeStyle='rgba(255,255,255,.95)';c.lineWidth=6;const m=70;c.strokeRect(m,m,W2-2*m,H-2*m);
+    c.beginPath();c.moveTo(W2/2,m);c.lineTo(W2/2,H-m);c.stroke();c.beginPath();c.arc(W2/2,H/2,80,0,7);c.stroke();
+    c.strokeRect(m,H/2-160,140,320);c.strokeRect(W2-m-140,H/2-160,140,320);c.strokeRect(m,H/2-70,50,140);c.strokeRect(W2-m-50,H/2-70,50,140);
+    c.fillStyle='#fff';c.beginPath();c.arc(W2/2,H/2,8,0,7);c.fill();
+    c.strokeStyle='#c85b3a';c.lineWidth=30;rrect(c,18,18,W2-36,H-36,120);c.stroke();});
+  tex.encoding=THREE.sRGBEncoding;
+  const pl=new THREE.Mesh(new THREE.PlaneGeometry(w,d),std({map:tex,roughness:.95}));pl.rotation.x=-Math.PI/2;pl.position.y=0.06;pl.receiveShadow=true;g.add(pl);
+  // goals
+  for(const s of [-1,1]){const gx=s*(w/2-w*0.068);const post=M('#ffffff');
+    const gp=new THREE.Group();[[-1.2],[1.2]].forEach(([z])=>{const c=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1,8),post);c.position.set(0,.5,z);gp.add(c);});
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,2.4,8),post);bar.rotation.x=Math.PI/2;bar.position.y=1;gp.add(bar);gp.position.x=gx;g.add(gp);}
+  // stand
+  const st=box(w*.4,.8,1.6,M('#d6d6d6'));st.position.set(0,.4,d/2+1.4);g.add(st);
+  const stRoof=box(w*.42,.1,2.0,M('#3f6fb5'));stRoof.position.set(0,2.2,d/2+1.4);g.add(stRoof);
+  for(const x of [-1,1])for(const z of [0]){const c=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,2.2,6),M('#888'));c.position.set(x*w*.2,1.1,d/2+2.2);g.add(c);}
+  return {g,top:1.5};
+}
+function buildCourt(p,tennis){
+  const w=p.w*S,d=p.d*S;const g=new THREE.Group();
+  const tex=canvasTex(512,240,(c,W2,H)=>{c.fillStyle=tennis?'#9c86c9':'#2f8fd6';c.fillRect(0,0,W2,H);c.fillStyle=tennis?'#5f8f4a':'#e3753a';c.fillRect(20,16,W2-40,H-32);
+    c.strokeStyle='#fff';c.lineWidth=4;c.strokeRect(34,30,W2-68,H-60);c.beginPath();c.moveTo(W2/2,30);c.lineTo(W2/2,H-30);c.stroke();
+    if(!tennis){c.beginPath();c.arc(W2/2,H/2,30,0,7);c.stroke();c.beginPath();c.arc(34,H/2,70,-1.57,1.57);c.stroke();c.beginPath();c.arc(W2-34,H/2,70,1.57,4.71);c.stroke();}
+    else{c.beginPath();c.moveTo(110,48);c.lineTo(110,H-48);c.moveTo(W2-110,48);c.lineTo(W2-110,H-48);c.moveTo(110,H/2);c.lineTo(W2-110,H/2);c.stroke();}});
+  tex.encoding=THREE.sRGBEncoding;
+  const pl=new THREE.Mesh(new THREE.PlaneGeometry(w,d),std({map:tex,roughness:.8}));pl.rotation.x=-Math.PI/2;pl.position.y=.07;pl.receiveShadow=true;g.add(pl);
+  if(tennis){const net=box(.05,.5,d*.8,std({color:'#ffffff',transparent:true,opacity:.7}));g.add(net);}
+  else for(const s of [-1,1]){const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,2.2,8),M('#444'));pole.position.set(s*(w/2-.3),1.1,0);g.add(pole);
+    const bb=box(.08,.7,1.1,M('#ffffff'));bb.position.set(s*(w/2-.55),2.2,0);g.add(bb);}
+  // fence
+  const fm=std({color:'#3d4a55',transparent:true,opacity:.35});
+  [[0,d/2,w,.04],[0,-d/2,w,.04],[w/2,0,.04,d],[-w/2,0,.04,d]].forEach(([x,z,a,b])=>{const f=box(a,1.4,b,fm);f.position.set(x,.7,z);f.castShadow=false;g.add(f);});
+  return {g,top:1.6};
+}
+function house(w,d,col,h){const g=new THREE.Group();const b=box(w,h,d,wallMats(col,w,d,h));g.add(b);
+  const r=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.78,1.0,4),std({color:shade(col,-0.35),roughness:.6}));r.rotation.y=Math.PI/4;r.scale.set(w/Math.max(w,d),1,d/Math.max(w,d));r.position.y=h+.5;g.add(r);return g;}
+function buildHouses(p){const g=new THREE.Group();const [hw,hd,hh]=p.hs;const c=centroid(p.list);
+  p.list.forEach(([x,y])=>{const hs=house(hw*S,hd*S,p.col,hh);const v=W(x,y).sub(c);hs.position.copy(v);hs.rotation.y=0.08;g.add(hs);});
+  g.position.copy(c);scene.add(shadowAll(g));return {g,top:hh+1.2};}
+function buildRows(p){const g=new THREE.Group();const c=centroid(p.list);
+  p.list.forEach(([x,y,w,d,a])=>{const hh=2.4;const r=new THREE.Group();const b=box(w*S,hh,d*S,wallMats(p.col,w*S,d*S,hh));r.add(b);
+    for(let i=0;i<Math.round(w/8);i++){const sep=box(.06,hh+.2,d*S+.1,M('#f5e3d3'));sep.position.x=-w*S/2+(i+1)*w*S/Math.round(w/8);r.add(sep);}
+    const rf=box(w*S+.2,.15,d*S+.2,M(shade(p.col,-0.3).getStyle()));rf.position.y=hh;r.add(rf);
+    r.position.copy(W(x,y).sub(c));r.rotation.y=-a;g.add(r);});
+  g.position.copy(c);scene.add(shadowAll(g));return {g,top:2.8};}
+function centroid(list){const v=new THREE.Vector3();list.forEach(([x,y])=>v.add(W(x,y)));return v.multiplyScalar(1/list.length);}
+
+function buildSmall(p){
+  const g=new THREE.Group();let top=2;
+  if(p.t==='gate'){ // two booths + arch
+    const booth=(x)=>{const b=new THREE.Group();const bx=box(1.2,1.6,1.2,wallMats('#cfe3ea',1.2,1.2,1.6));b.add(bx);const rf=box(1.6,.15,1.6,M('#2f6f8f'));rf.position.y=1.65;b.add(rf);b.position.x=x;return b;};
+    g.add(booth(-3.6));g.add(booth(3.6));
+    for(const x of [-2.6,2.6]){const c=box(.35,3.2,.35,M('#f2f2f2'));c.position.x=x;g.add(c);}
+    const beam=box(5.8,.6,.45,M('#1f4e9c'));beam.position.y=3.4;g.add(beam);
+    const sign=textSprite('วท.ท่าหลวงซิเมนต์ไทยอนุสรณ์',40,'#1f4e9c');sign.scale.multiplyScalar(.62);sign.position.set(0,4.4,0);g.add(sign);
+    const barrier=box(2.4,.08,.08,M('#e53935'));barrier.position.set(-1.2,.9,.4);g.add(barrier);
+    top=4.9;
+  } else if(p.t==='shrine'){
+    const base=box(1.6,.5,1.6,M('#f1ece2'));g.add(base);const b2=box(1.1,.6,1.1,M('#e8dcc4'));b2.position.y=.8;g.add(b2);
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.32,1.0,12),std({color:'#d4a52c',metalness:.7,roughness:.3}));body.position.y=1.6;g.add(body);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.2,16,12),std({color:'#d4a52c',metalness:.7,roughness:.3}));head.position.y=2.25;g.add(head);
+    const crown=new THREE.Mesh(new THREE.ConeGeometry(.14,.4,12),std({color:'#e7c04a',metalness:.8,roughness:.25}));crown.position.y=2.6;g.add(crown);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(1.4,1.0,4),std({color:'#a8322c'}));roof.position.y=3.5;roof.rotation.y=Math.PI/4;g.add(roof);
+    for(const x of [-.65,.65])for(const z of [-.65,.65]){const c=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,2.4,8),M('#f5f0e6'));c.position.set(x,1.7,z);g.add(c);}
+    top=4.1;
+  } else if(p.t==='flag'){
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,.35,24),M('#e9e6df'));base.position.y=.17;g.add(base);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,7,10),std({color:'#e6e6e6',metalness:.6,roughness:.3}));pole.position.y=3.85;g.add(pole);
+    const ftex=canvasTex(150,100,(c)=>{const cs=['#a51931','#f4f5f8','#2d2a4a','#2d2a4a','#f4f5f8','#a51931'];const hs=[1,1,1,1,1,1];c.fillStyle='#a51931';c.fillRect(0,0,150,100);c.fillStyle='#f4f5f8';c.fillRect(0,16.7,150,66.6);c.fillStyle='#2d2a4a';c.fillRect(0,33.3,150,33.4);});
+    ftex.encoding=THREE.sRGBEncoding;
+    const fg=new THREE.PlaneGeometry(1.8,1.2,12,1);fg.translate(.9,0,0);
+    const flag=new THREE.Mesh(fg,std({map:ftex,side:THREE.DoubleSide,roughness:.9}));flag.position.y=6.6;g.add(flag);g.userData.flag=flag;top=7.6;
+  } else if(p.t==='sign'){
+    for(const x of [-1.2,1.2]){const l=box(.12,1.6,.12,M('#555'));l.position.x=x;g.add(l);}
+    const stex=canvasTex(512,220,(c,W2,H)=>{const gr=c.createLinearGradient(0,0,W2,0);gr.addColorStop(0,'#1f4e9c');gr.addColorStop(1,'#2aa3d9');c.fillStyle=gr;c.fillRect(0,0,W2,H);
+      c.fillStyle='#ffb020';c.fillRect(0,H-18,W2,18);c.fillStyle='#fff';c.font=`700 52px ${FONT}`;c.textAlign='center';c.fillText('ยินดีต้อนรับ',W2/2,88);c.font=`400 30px ${FONT}`;c.fillText('ข่าวสาร · กิจกรรม · ประชาสัมพันธ์',W2/2,150);});
+    stex.encoding=THREE.sRGBEncoding;
+    const board=new THREE.Mesh(new THREE.BoxGeometry(3,1.3,.12),[M('#333'),M('#333'),M('#333'),M('#333'),std({map:stex}),M('#444')]);board.position.y=2.1;g.add(board);top=2.9;
+  } else if(p.t==='parking'){
+    const w=p.w*S,d=p.d*S;const ptex=canvasTex(256,256,(c,W2,H)=>{c.fillStyle='#7c7f84';c.fillRect(0,0,W2,H);c.strokeStyle='#f2f2f2';c.lineWidth=3;for(let i=0;i<=6;i++){c.beginPath();c.moveTo(20+i*36,20);c.lineTo(20+i*36,90);c.moveTo(20+i*36,166);c.lineTo(20+i*36,236);c.stroke();}});
+    ptex.encoding=THREE.sRGBEncoding;
+    const pl=new THREE.Mesh(new THREE.PlaneGeometry(w,d),std({map:ptex}));pl.rotation.x=-Math.PI/2;pl.position.y=.06;pl.receiveShadow=true;g.add(pl);
+    const cols=['#e53935','#ffffff','#1e88e5','#212121','#9e9e9e','#fdd835','#ffffff','#43a047'];let k=0;
+    for(const z of [-1,1])for(let i=0;i<6;i++){if((i+z)%3===0)continue;const car=carMesh(cols[k++%cols.length]);car.position.set(-w/2+w*(i+.5)/6*.9+w*.05,0,z*d*.3);car.rotation.y=Math.PI/2;g.add(car);}
+    top=1.4;
+  } else if(p.t==='shops'){
+    const w=p.w*S,d=p.d*S;const n=6;
+    for(let i=0;i<n;i++){const sw=w/n*.92;const s=box(sw,p.h,d,wallMats(p.col,sw,d,p.h));s.position.x=-w/2+w*(i+.5)/n;g.add(s);
+      const aw=box(sw,.08,.6,M(i%2?'#e53935':'#ffffff'));aw.position.set(s.position.x,p.h*.8,d/2+.3);aw.rotation.x=.3;g.add(aw);}
+    top=p.h+.4;
+  } else if(p.t==='garage'){
+    const w=p.w*S,d=p.d*S,h=p.h;
+    for(let i=0;i<3;i++){const sl=box(w,.18,d,M(i===2?p.col:'#c9cfc0'));sl.position.y=i*h/2+.09;g.add(sl);}
+    for(const x of [-1,-.33,.33,1])for(const z of [-1,1]){const c=box(.25,h,.25,M('#d9ddd2'));c.position.set(x*(w/2-.2),h/2,z*(d/2-.2));g.add(c);}
+    for(let i=0;i<4;i++){const car=carMesh(['#1e88e5','#ffffff','#e53935','#424242'][i]);car.scale.setScalar(.8);car.position.set(-w/2+1+i*1.3,h/2+.18,0);g.add(car);}
+    top=h+.4;
+  }
+  return {g,top};
+}
+function carMesh(col){const g=new THREE.Group();const b=box(.8,.35,1.7,std({color:col,roughness:.4,metalness:.3}));b.position.y=.3;g.add(b);
+  const cab=box(.7,.3,.9,std({color:'#28323c',roughness:.2,metalness:.5}));cab.position.y=.62;cab.position.z=-.1;g.add(cab);return g;}
+
+/* ---------------- build all ---------------- */
+function buildAll(){
+  PL.forEach(p=>{
+    let r;
+    if(p.t==='bld')r=buildBuilding(p);
+    else if(p.t==='dome')r=buildDome(p);
+    else if(p.t==='field')r=buildField(p);
+    else if(p.t==='court')r=buildCourt(p,false);
+    else if(p.t==='tennis')r=buildCourt(p,true);
+    else if(p.t==='houses'){r=buildHouses(p);}
+    else if(p.t==='rows'){r=buildRows(p);}
+    else r=buildSmall(p);
+    if(p.t!=='houses'&&p.t!=='rows')placeGroup(r.g,p);
+    p.obj=r.g;p.top=r.top;p.center=r.g.position.clone();
+    const span=p.list?Math.max(...p.list.map(q=>W(q[0],q[1]).distanceTo(p.center)))*2+3:Math.max(p.w||12,p.d||12)*S;
+    p.span=span;
+    const lb=makeLabel(p);lb.position.set(p.center.x,r.top+0.6,p.center.z);scene.add(lb);p.label=lb;labelSprites.push(lb);
+  });
+  // road direction signs
+  const l1=textSprite('◀  ไปบริษัทปูนซิเมนต์ไทย (โรงงานท่าหลวง)',40,'rgba(30,40,55,.85)');l1.position.copy(W(-40,128)).setY(1.6);scene.add(l1);
+  const l2=textSprite('ไปถนนพหลโยธิน  ▶',40,'rgba(30,40,55,.85)');l2.position.copy(W(720,128)).setY(1.6);scene.add(l2);
+  const l3=textSprite('ถนนพัฒนพงศ์',44,'rgba(214,120,20,.92)');l3.position.copy(W(470,128)).setY(1.8);scene.add(l3);
+  // street lamps along main road
+  for(let x=-200;x<1100;x+=45){const lp=new THREE.Group();const pole=new THREE.Mesh(new THREE.CylinderGeometry(.05,.07,3,6),M('#9aa0a6'));pole.position.y=1.5;lp.add(pole);
+    const hd=box(.5,.1,.18,M('#e8e8e8'));hd.position.set(.2,3,0);lp.add(hd);lp.position.copy(W(x,151));scene.add(lp);}
+  plantTrees();
+  // background cement plant hint (far left) & town (far right)
+  const plant=new THREE.Group();
+  for(let i=0;i<3;i++){const s=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.5,14,16),M('#cfcfcf'));s.position.set(i*3.2,7,0);plant.add(s);}
+  const chim=new THREE.Mesh(new THREE.CylinderGeometry(.5,.8,22,12),M('#b8b8b8'));chim.position.set(-4,11,2);plant.add(chim);
+  const shed=box(14,5,8,M('#d7d2c8'));shed.position.set(2,0,6);plant.add(shed);
+  plant.position.copy(W(-420,60));scene.add(shadowAll(plant));
+}
+function plantTrees(){
+  const blocks=PL.filter(p=>!p.list).map(p=>({c:p.center,r:Math.hypot((p.w||14)*S,(p.d||14)*S)/2+1.2}));
+  PL.filter(p=>p.list).forEach(p=>p.list.forEach(q=>blocks.push({c:W(q[0],q[1]),r:2.4})));
+  const pts=[];const rnd=mulberry(7);
+  const ok=(v,pad)=>{if(Math.abs(v.z-W(0,136).z)<2.6)return false; for(const b of blocks)if(b.c.distanceTo(v)<b.r+(pad||0))return false;return true;};
+  // rows along roads & boundary
+  for(let x=0;x<813;x+=13){[[x,154],[x,118]].forEach(([a,b])=>{const v=W(a+rnd()*4,b+rnd()*3);if(ok(v))pts.push(v);});}
+  const edge=[[8,214],[150,420],[560,388],[813,345]];for(let i=0;i<edge.length-1;i++){const A=edge[i],B=edge[i+1];const n=Math.round(Math.hypot(B[0]-A[0],B[1]-A[1])/12);for(let k=0;k<=n;k++){const v=W(A[0]+(B[0]-A[0])*k/n,A[1]+(B[1]-A[1])*k/n+6);if(ok(v))pts.push(v);}}
+  // scatter inside campus gaps
+  for(let i=0;i<500;i++){const v=W(20+rnd()*790,160+rnd()*240);if(ok(v,.8)&&rnd()<.55)pts.push(v);}
+  // outside forest
+  for(let i=0;i<900;i++){const a=rnd()*Math.PI*2,r=60+rnd()*120;const v=new THREE.Vector3(Math.cos(a)*r,0,Math.sin(a)*r*.8);if(ok(v))pts.push(v);}
+  const trunkG=new THREE.CylinderGeometry(.1,.14,1,6);trunkG.translate(0,.5,0);
+  const leafG=new THREE.IcosahedronGeometry(1,0);
+  const trunks=new THREE.InstancedMesh(trunkG,M('#6b4a2b'),pts.length);
+  const leaves=new THREE.InstancedMesh(leafG,std({color:'#ffffff',roughness:.9,flatShading:true}),pts.length);
+  const m=new THREE.Matrix4(),q=new THREE.Quaternion(),sc=new THREE.Vector3();const greens=['#3f8f3a','#4fa043','#2f7a35','#5aa84a','#6db352'];
+  pts.forEach((v,i)=>{const s=.7+rnd()*.7;sc.set(1,1.2*s,1);m.compose(v,q,sc);trunks.setMatrixAt(i,m);
+    q.setFromEuler(new THREE.Euler(rnd(),rnd()*3,0));sc.set(s,s*1.05,s);const pos=v.clone();pos.y=1.2*s+s*.7;m.compose(pos,q,sc);leaves.setMatrixAt(i,m);q.identity();
+    leaves.setColorAt(i,new THREE.Color(greens[i%greens.length]));});
+  [trunks,leaves].forEach(o=>{o.castShadow=true;o.receiveShadow=true;scene.add(o);});
+}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+
+/* ---------------- tour timeline ---------------- */
+const STOPS=[{kind:'open'}].concat(ORDER.map(c=>({kind:'place',p:byCode[c]}))).concat([{kind:'end'}]);
+const tour={mode:'free',idx:0,phase:'hold',t:0,from:null,speed:1,elapsed:0};
+const HOLD=4.6,FLY=2.5,OPEN=8,END=6;
+function poseFor(stop,k){
+  if(stop.kind==='open'){const az=-0.9+0.9*k;const dist=100-30*ease(k);const el=.9-.25*ease(k);const tg=new THREE.Vector3(2,0,6);
+    return {pos:new THREE.Vector3(tg.x+Math.sin(az)*Math.cos(el)*dist,Math.sin(el)*dist,tg.z+Math.cos(az)*Math.cos(el)*dist),tgt:tg};}
+  if(stop.kind==='end'){const az=.3+.6*k;const dist=75+25*k,el=.7+.15*k;const tg=new THREE.Vector3(2,0,6);
+    return {pos:new THREE.Vector3(tg.x+Math.sin(az)*Math.cos(el)*dist,Math.sin(el)*dist,tg.z+Math.cos(az)*Math.cos(el)*dist),tgt:tg};}
+  const p=stop.p;const tg=p.center.clone();tg.y=Math.min(p.top*.45,2.2);
+  const dist=clamp(p.span*1.05+8,10,36);const el=p.t==='field'?.62:.42;
+  const base=(p.az!==undefined?p.az:-0.25);const az=base+(-0.35+0.7*k);
+  return {pos:new THREE.Vector3(tg.x+Math.sin(az)*Math.cos(el)*dist,Math.sin(el)*dist+.5,tg.z+Math.cos(az)*Math.cos(el)*dist),tgt:tg};
+}
+function holdDur(s){return s.kind==='open'?OPEN:s.kind==='end'?END:HOLD;}
+const camTgt=new THREE.Vector3();
+function goTo(i,mode){
+  tour.idx=clamp(i,0,STOPS.length-1);tour.mode=mode||tour.mode;
+  tour.from={pos:camera.position.clone(),tgt:controls.target.clone()};
+  tour.phase=(STOPS[tour.idx].kind==='open'&&tour.idx===0&&mode==='tour'&&tour.fresh)?'hold':'fly';tour.fresh=false;tour.t=0;
+  controls.enabled=false;highlight();updateList();
+}
+function startTour(){tour.fresh=true;tour.elapsed=0;goTo(0,'tour');$('bPlay').textContent='⏸ หยุดชั่วคราว';}
+function stopTour(){tour.mode='free';controls.enabled=true;controls.target.copy(camTgt);$('bPlay').textContent='▶ เริ่มเล่นวิดีโอทัวร์';highlight();}
+function totalDur(){return STOPS.reduce((a,s,i)=>a+holdDur(s)+(i?FLY:0),0);}
+function tickTour(dt){
+  if(tour.mode==='free')return;
+  const st=STOPS[tour.idx];tour.t+=dt*tour.speed;if(tour.mode==='tour')tour.elapsed+=dt*tour.speed;
+  let pose;
+  if(tour.phase==='fly'){
+    const k=clamp(tour.t/FLY,0,1),e=ease(k);const to=poseFor(st,0);
+    pose={pos:tour.from.pos.clone().lerp(to.pos,e),tgt:tour.from.tgt.clone().lerp(to.tgt,e)};
+    pose.pos.y+=Math.sin(Math.PI*e)*Math.min(14,tour.from.pos.distanceTo(to.pos)*.25);
+    if(k>=1){tour.phase='hold';tour.t=0;}
+  } else {
+    const hd=holdDur(st);const k=tour.mode==='single'?((tour.t/hd)%2<1?(tour.t/hd)%1:1-(tour.t/hd)%1):clamp(tour.t/hd,0,1);
+    pose=poseFor(st,st.kind==='place'?k:clamp(tour.t/hd,0,1));
+    if(tour.mode==='tour'&&tour.t>=hd){
+      if(tour.idx<STOPS.length-1)goTo(tour.idx+1,'tour');
+      else{stopTour();if(rec.active)stopRec();toast('จบการนำชมแล้ว ขอบคุณที่ร่วมชม');}
+    }
+  }
+  camera.position.copy(pose.pos);camTgt.copy(pose.tgt);camera.lookAt(camTgt);
+}
+function highlight(){
+  const cur=tour.mode!=='free'?STOPS[tour.idx]:null;
+  PL.forEach(p=>{const on=cur&&cur.p===p;const sp=p.label;const b=sp.userData.base;const s=on?1.7:1;sp.scale.set(b.x*s,b.y*s,1);
+    sp.material.opacity=!cur||on?1:cur.kind==='end'?.85:.0;sp.visible=sp.material.opacity>0;});
+}
+
+/* ---------------- overlay: lower third + titles (drawn on canvas so it's in the recording) ---------------- */
+const ov=$('overlay');const og=ov.getContext('2d');
+function wrapTokens(ctx,tokens,maxW){const lines=[];let cur='';tokens.forEach((t,i)=>{const s=cur?cur+'  •  '+t:t;if(ctx.measureText(s).width>maxW&&cur){lines.push(cur);cur=t;}else cur=s;});if(cur)lines.push(cur);return lines;}
+function drawOverlay(){
+  const w=ov.width,h=ov.height;og.clearRect(0,0,w,h);
+  const u=Math.min(w,h*1.6)/1000; // unit
+  // vignette subtle
+  const st=tour.mode!=='free'?STOPS[tour.idx]:null;
+  if(st&&st.kind==='open'){
+    const a=tour.phase==='hold'?clamp(tour.t*tour.speed/1.2,0,1)*clamp((OPEN-tour.t)/1.2,0,1):0;
+    if(a>0){og.save();og.globalAlpha=a;og.textAlign='center';
+      og.fillStyle='rgba(8,16,30,.45)';const bh=170*u;og.fillRect(0,h*.36,w,bh);
+      og.fillStyle='#ffb020';og.font=`600 ${22*u}px ${FONT}`;og.fillText('CAMPUS TOUR 3D',w/2,h*.36+40*u);
+      og.fillStyle='#fff';og.font=`700 ${44*u}px ${FONT}`;og.fillText('วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์',w/2,h*.36+95*u);
+      og.font=`300 ${20*u}px ${FONT}`;og.fillStyle='#dfe8f4';og.fillText('Tha Luang Cement Thai Anusorn Technical College · ถนนพัฒนพงศ์',w/2,h*.36+135*u);og.restore();}
+  }
+  if(st&&st.kind==='end'&&tour.phase==='hold'){
+    const a=clamp(tour.t/1.2,0,1);og.save();og.globalAlpha=a;og.textAlign='center';og.fillStyle='rgba(8,16,30,.45)';og.fillRect(0,h*.4,w,120*u);
+    og.fillStyle='#fff';og.font=`700 ${40*u}px ${FONT}`;og.fillText('ขอบคุณที่ร่วมชม',w/2,h*.4+60*u);og.font=`300 ${20*u}px ${FONT}`;og.fillStyle='#dfe8f4';og.fillText('วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์',w/2,h*.4+98*u);og.restore();
+  }
+  if(st&&st.kind==='place'&&tour.phase==='hold'){
+    const p=st.p;const hd=holdDur(st);
+    const tin=clamp(tour.t/0.6,0,1),tout=tour.mode==='tour'?clamp((hd-tour.t)/0.45,0,1):1;const e=ease(tin)*tout;
+    const pad=24*u,x0=pad-(1-ease(tin))*300*u;const bw=Math.min(w-2*pad,820*u);
+    og.save();og.globalAlpha=tout;
+    og.font=`300 ${19*u}px ${FONT}`;const lines=wrapTokens(og,p.u,bw-150*u).slice(0,3);
+    const bh=(78+lines.length*27)*u;const y0=h-bh-pad-10*u;
+    // badge
+    og.fillStyle=p.col;rrect(og,x0,y0,108*u,bh,14*u);og.fill();
+    og.fillStyle='rgba(0,0,0,.12)';rrect(og,x0,y0+bh-8*u,108*u,8*u,4*u);og.fill();
+    const light=tmpC.set(p.col).getHSL({}).l>0.7;og.fillStyle=light?'#1b2433':'#fff';og.textAlign='center';og.textBaseline='middle';
+    og.font=`700 ${(p.c.length>1?40:56)*u}px ${FONT}`;og.fillText(p.c,x0+54*u,y0+bh/2);
+    // main bar
+    const bx=x0+116*u;const barW=(bw-116*u)*e;
+    if(barW>4){og.save();rrect(og,bx,y0,barW,bh,14*u);og.clip();
+      const gr=og.createLinearGradient(bx,0,bx+bw,0);gr.addColorStop(0,'rgba(10,20,36,.92)');gr.addColorStop(1,'rgba(10,20,36,.72)');og.fillStyle=gr;og.fillRect(bx,y0,bw,bh);
+      og.fillStyle=p.col;og.fillRect(bx,y0,5*u,bh);
+      og.textAlign='left';og.textBaseline='alphabetic';
+      og.fillStyle='#ffb020';og.font=`600 ${14*u}px ${FONT}`;const n=STOPS.indexOf(st);og.fillText(`จุดที่ ${String(n).padStart(2,'0')} / ${ORDER.length}   ·   ${typeName(p)}`,bx+22*u,y0+26*u);
+      og.fillStyle='#fff';og.font=`600 ${30*u}px ${FONT}`;og.fillText(p.n,bx+22*u,y0+62*u);
+      og.fillStyle='#d5deea';og.font=`300 ${19*u}px ${FONT}`;lines.forEach((l,i)=>og.fillText(l,bx+22*u,y0+(92+i*27)*u));
+      og.restore();}
+    og.restore();
+  }
+  // watermark + REC
+  og.save();og.textAlign='right';og.textBaseline='alphabetic';og.fillStyle='rgba(255,255,255,.75)';og.font=`600 ${13*u}px ${FONT}`;
+  if(rec.active){og.fillStyle='#ff3b3b';og.beginPath();og.arc(w-150*u,h-22*u,6*u,0,7);og.fill();og.fillStyle='#fff';og.fillText('REC '+fmt(rec.sec()),w-pad(u),h-17*u);}
+  og.restore();
+}
+function pad(u){return 24*u}
+function fmt(s){s=Math.floor(s);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function typeName(p){if(/^[1-9]$/.test(p.c))return 'อาคารเรียนและปฏิบัติการ';if('ABCD'.includes(p.c))return 'บ้านพักและสวัสดิการ';if('EFGHIJK⚽'.includes(p.c))return 'สนามกีฬาและจุดสำคัญหน้าวิทยาลัย';return 'ศูนย์บริการและโรงฝึกงาน';}
+
+/* ---------------- recording ---------------- */
+const rec={active:false,mr:null,chunks:[],start:0,canvas:null,ctx:null,mime:'',ext:'webm',sec(){return (performance.now()-this.start)/1000;}};
+let downloads=null;
+if(window.claude&&claude.use)claude.use('downloads').then(d=>{downloads=d;}).catch(()=>{});
+function pickMime(){const c=[['video/mp4;codecs=avc1.42E01E','mp4'],['video/mp4','mp4'],['video/webm;codecs=vp9','webm'],['video/webm;codecs=vp8','webm'],['video/webm','webm']];
+  for(const [m,e] of c){if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m))return [m,e];}return ['', 'webm'];}
+function startRec(){
+  if(!window.MediaRecorder){toast('เบราว์เซอร์นี้ไม่รองรับการบันทึกวิดีโอ');return;}
+  const src=renderer.domElement;rec.canvas=document.createElement('canvas');rec.canvas.width=src.width&~1;rec.canvas.height=src.height&~1;rec.ctx=rec.canvas.getContext('2d');
+  const [m,e]=pickMime();rec.mime=m;rec.ext=e;
+  const stream=rec.canvas.captureStream(30);
+  try{rec.mr=new MediaRecorder(stream,m?{mimeType:m,videoBitsPerSecond:8e6}:{videoBitsPerSecond:8e6});}catch(err){toast('เริ่มบันทึกไม่ได้: '+err.message);return;}
+  rec.chunks=[];rec.mr.ondataavailable=ev=>{if(ev.data&&ev.data.size)rec.chunks.push(ev.data);};
+  rec.mr.onstop=saveRec;rec.mr.start(500);rec.active=true;rec.start=performance.now();
+  $('bRec').classList.add('on');$('bRec').textContent='■ หยุดบันทึก';
+  if(tour.mode!=='tour'){startTour();toast('เริ่มบันทึก + เล่นทัวร์ตั้งแต่ต้น (จะหยุดเองเมื่อจบ)');}
+}
+function stopRec(){if(!rec.active)return;rec.active=false;rec.mr.stop();$('bRec').classList.remove('on');$('bRec').textContent='● บันทึกวิดีโอ';}
+async function saveRec(){
+  const blob=new Blob(rec.chunks,{type:rec.mime||'video/webm'});const name=`TLCT-Campus-Tour.${rec.ext}`;
+  if(downloads){try{await downloads.save({filename:name,data:blob});toast('บันทึกไฟล์ '+name+' แล้ว');return;}catch(e){if(e&&e.code==='declined'){toast('ยกเลิกการดาวน์โหลด');return;}}}
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();toast('กำลังดาวน์โหลด '+name);}
+  catch(e){toast('ดาวน์โหลดไม่สำเร็จในหน้าต่างนี้');}
+}
+function captureFrame(){if(!rec.active)return;const c=rec.ctx,W2=rec.canvas.width,H=rec.canvas.height;c.drawImage(renderer.domElement,0,0,W2,H);c.drawImage(ov,0,0,W2,H);}
+
+/* ---------------- UI ---------------- */
+function buildList(){
+  const d=$('drawer');let html='';let grp='';
+  ORDER.forEach((c,i)=>{const p=byCode[c];const g=typeName(p);if(g!==grp){html+=`<h4>${g}</h4>`;grp=g;}
+    html+=`<div class="stop" data-i="${i+1}"><i style="background:${p.col};color:${tmpC.set(p.col).getHSL({}).l>.7?'#1b2433':'#fff'}">${c}</i><span>${p.n}</span></div>`;});
+  d.innerHTML=html;
+  d.querySelectorAll('.stop').forEach(el=>el.onclick=()=>{const i=+el.dataset.i;if(tour.mode==='tour'){goTo(i,'tour');}else goTo(i,'single');if(innerWidth<700)d.classList.remove('open');});
+}
+function updateList(){document.querySelectorAll('.stop').forEach(el=>el.classList.toggle('cur',tour.mode!=='free'&&+el.dataset.i===tour.idx));}
+$('bPlay').onclick=()=>{if(tour.mode==='tour'){stopTour();if(rec.active)stopRec();}else startTour();};
+$('bNext').onclick=()=>goTo(Math.min(tour.idx+1,STOPS.length-1),tour.mode==='tour'?'tour':'single');
+$('bPrev').onclick=()=>goTo(Math.max(tour.idx-1,0),tour.mode==='tour'?'tour':'single');
+const SPEEDS=[1,1.5,2,0.75];$('bSpeed').onclick=()=>{tour.speed=SPEEDS[(SPEEDS.indexOf(tour.speed)+1)%SPEEDS.length];$('bSpeed').textContent=tour.speed+'×';};
+$('bRec').onclick=()=>rec.active?stopRec():startRec();
+$('bList').onclick=()=>$('drawer').classList.toggle('open');
+renderer.domElement.addEventListener('pointerdown',()=>{if(tour.mode==='single')stopTour();});
+renderer.domElement.addEventListener('wheel',()=>{if(tour.mode==='single')stopTour();},{passive:true});
+
+/* ---------------- loop ---------------- */
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.fov=w<h?58:42;camera.updateProjectionMatrix();
+  const pr=renderer.getPixelRatio();ov.width=Math.round(w*pr);ov.height=Math.round(h*pr);}
+addEventListener('resize',resize);
+let last=performance.now();const clock={t:0};
+function frame(now){
+  const dt=Math.min(.25,(now-last)/1000);last=now;clock.t+=dt;
+  tickTour(dt);
+  if(tour.mode==='free'){controls.update();camTgt.copy(controls.target);}
+  const flag=byCode['I'].obj.userData.flag;if(flag){const pa=flag.geometry.attributes.position;for(let i=0;i<pa.count;i++){const x=pa.getX(i);pa.setZ(i,Math.sin(x*3-clock.t*5)*.12*x);}pa.needsUpdate=true;}
+  renderer.render(scene,camera);drawOverlay();captureFrame();
+  if(tour.mode==='tour'){$('progFill').style.width=(100*tour.elapsed/totalDur()).toFixed(2)+'%';}else $('progFill').style.width='0';
+  requestAnimationFrame(frame);
+}
+function init(){
+  buildAll();buildList();resize();
+  const p0=poseFor(STOPS[0],0);camera.position.copy(p0.pos);controls.target.copy(p0.tgt);camTgt.copy(p0.tgt);controls.update();
+  $('loading').remove();requestAnimationFrame(frame);
+  setTimeout(()=>toast('กด “▶ เริ่มเล่นวิดีโอทัวร์” เพื่อชมแบบอัตโนมัติ หรือแตะ “☰ สถานที่” เพื่อเลือกจุด',4200),600);
+}
+const fontReady=document.fonts&&document.fonts.load?Promise.all([document.fonts.load(`600 40px Kanit`),document.fonts.load(`700 40px Kanit`),document.fonts.load(`300 20px Kanit`)]):Promise.resolve();
+Promise.race([fontReady,new Promise(r=>setTimeout(r,2500))]).then(init,init);
+})();
+</script>
+</body>
+</html>
