@@ -119,6 +119,17 @@ def test_screen_header_uses_real_logo():
     assert b"/static/logo.jpg" in screen.data   # header อ้างโลโก้จริง
 
 
+def test_campus_tour_only_in_sidebar():
+    """ปุ่มแนะนำสถานที่วิทยาลัยอยู่แถบซ้ายเท่านั้น และหน้าทัวร์ 3 มิติเปิดได้จริง"""
+    c = make_client()
+    html = c.get("/screen").get_data(as_text=True)
+    aside = html[html.index("<aside>"):html.index("</aside>")]
+    assert 'data-action="campusTour"' in aside
+    assert html.count('data-action="campusTour"') == 1     # ไม่ไปโผล่ในชิปหน้าแรก/แถวล่าง
+    r = c.get("/static/campus_tour.html")
+    assert r.status_code == 200 and "Campus Tour" in r.get_data(as_text=True)
+
+
 def test_screen_has_quick_questions():
     """จอเนื้อหามีแถบคำถามยอดนิยมให้แตะถามได้"""
     c = make_client()

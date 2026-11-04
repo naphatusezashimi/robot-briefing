@@ -12,7 +12,8 @@ def test_demo_has_all_files(tmp_path):
     build(tmp_path)
     for f in ("index.html", "demo.js", "menu.json", ".nojekyll",
               "face.html", "stats.html", "static/face.js",
-              "static/screen.js", "static/logo.jpg", "static/map.jpg", "static/places/CREDITS.md"):
+              "static/screen.js", "static/logo.jpg", "static/map.jpg", "static/places/CREDITS.md",
+              "static/campus_tour.html"):
         assert (tmp_path / f).is_file(), f
 
 

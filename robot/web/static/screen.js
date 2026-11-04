@@ -14,6 +14,7 @@ const T = {
     send: "ส่ง", mic: "กดเพื่อพูด", replay: "ฟังอีกครั้ง", theme: "สลับโหมดมืด/สว่าง",
     cMap: "แผนผังวิทยาลัย", cPrograms: "สาขาที่เปิดสอน", cApply: "คุณสมบัติผู้สมัคร",
     cContact: "ช่องทางติดต่อ", cTrips: "ที่เที่ยวสระบุรี", cSouvenir: "ของฝากสระบุรี",
+    cTour: "แนะนำสถานที่วิทยาลัย", closeTour: "ปิด กลับหน้าถามตอบ",
     hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะครับ",
     spoken: "🎤 พูด", mapAlt: "แผนผังวิทยาลัย",
     mapMsg: "นี่คือแผนผังวิทยาลัยครับ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
@@ -41,6 +42,7 @@ const T = {
     send: "Send", mic: "Tap to speak", replay: "Play again", theme: "Switch dark/light mode",
     cMap: "Campus map", cPrograms: "Programs offered", cApply: "Admission requirements",
     cContact: "Contact us", cTrips: "Places to visit", cSouvenir: "Local souvenirs",
+    cTour: "Campus tour (3D)", closeTour: "Close",
     hint: "Answers come from the college's own information. When in doubt, please ask our staff.",
     spoken: "🎤 Spoken", mapAlt: "Campus map",
     mapMsg: "Here's the campus map 🗺️ Tap the image to zoom in.",
@@ -548,6 +550,7 @@ document.addEventListener("keydown", (e) => {
 // รหัสใน qr_codes.json → ส่งเป็นคำถามให้ AI (ได้รูป/แผนผังเหมือนถามเอง) หรือพูดคำตอบตายตัวเลย
 function onScan(code) {
   if (attractOn) stopAttract();
+  closeTour();
   if (busy() || announcing) return;
   if (recog && listening) { recog.stop(); listening = false; }
   fetch("/qr?code=" + encodeURIComponent(code) + "&lang=" + lang)
@@ -630,6 +633,7 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const action = b.dataset.action;
   if (action === "newChat") { newChat(); return; }
+  if (action === "closeTour") { closeTour(); return; }
   if (busy()) return;   // กันแตะรัวระหว่างหุ่นกำลังคิด/พูด
   if (b.dataset.menu || b.dataset.menuCat || b.dataset.menuItem) {
     // เมนูยังไม่มา (โหลดไม่ทัน/เคยพัง) → ลองโหลดใหม่ก่อน ถ้ายังไม่ได้จริง ๆ ชิปค่อยตกไปถาม AI แบบเดิม
@@ -639,6 +643,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (action === "showMap") { showMap(); return; }
+  if (action === "campusTour") { openTour(); return; }
   askChip(b);
 });
 function askChip(b) {
@@ -647,6 +652,32 @@ function askChip(b) {
 }
 
 document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("click", () => applyLang(b.dataset.lang)));
+
+// ---- แนะนำสถานที่วิทยาลัย: ทัวร์ 3 มิติ (static/campus_tour.html) เต็มจอ — โหลดตอนเปิด ปิดแล้วทิ้ง (คืนหน่วยความจำ WebGL) ----
+const TOUR_SRC = "/static/campus_tour.html", TOUR_IDLE_MS = 5 * 60 * 1000;
+const tourEl = $("tourView"), tourFrame = tourEl.querySelector("iframe");
+let tourOpen = false;
+function openTour() {
+  if (tourOpen) return;
+  if (recog && listening) { recog.stop(); listening = false; }
+  stopSpeech();
+  tourOpen = true; idleSince = Date.now();
+  tourFrame.src = TOUR_SRC;
+  tourEl.classList.add("open");
+}
+function closeTour() {
+  if (!tourOpen) return;
+  tourOpen = false; idleSince = Date.now();
+  tourEl.classList.remove("open");
+  tourFrame.src = "about:blank";
+}
+// แตะ/ลากในทัวร์ไม่ถึง document หน้านี้ → ดักใน iframe เองเพื่อนับว่ายังมีคนใช้อยู่ (ไฟล์เดียวกัน origin เดียวกัน)
+tourFrame.addEventListener("load", () => {
+  try {
+    const d = tourFrame.contentDocument;
+    if (d) ["pointerdown", "wheel", "keydown"].forEach((ev) => d.addEventListener(ev, () => { idleSince = Date.now(); }, { capture: true, passive: true }));
+  } catch (e) {}
+});
 
 // ---- lightbox ----
 const lightbox = $("lightbox");
@@ -666,7 +697,7 @@ applyLang(lang);   // ตั้งภาษา + ส่งสถานะ idle �
 // ---- GPIO button via SSE ----
 const evtSrc = new EventSource("/events");
 evtSrc.onmessage = (e) => {
-  if (e.data === "mic-start" && !listening && !busy()) { stopAttract(); onActivity(); toggleMic(); }
+  if (e.data === "mic-start" && !listening && !busy()) { stopAttract(); closeTour(); onActivity(); toggleMic(); }
   if (e.data === "greet") { stopAttract(); greet(); }   // เซนเซอร์เจอคนเดินมา
 };
 
@@ -711,7 +742,9 @@ document.addEventListener("pointerdown", () => { idleSince = Date.now(); }, true
 document.addEventListener("keydown", () => { idleSince = Date.now(); }, true);
 setInterval(() => {
   if (attractOn || state !== "idle" || listening || greeting || announcing) return;
-  if (Date.now() - idleSince > (attractCfg.after || 90) * 1000) startAttract();
+  // เปิดทัวร์ทิ้งไว้: ให้เวลานานกว่าปกติ (ทัวร์อัตโนมัติยาว ~3-4 นาที) แล้วค่อยปิดเข้าโหมดรอ
+  const after = (attractCfg.after || 90) * 1000, limit = tourOpen ? Math.max(after, TOUR_IDLE_MS) : after;
+  if (Date.now() - idleSince > limit) { closeTour(); startAttract(); }
 }, 2000);
 
 // ---- ประกาศตามเวลา: ถามเซิร์ฟเวอร์ทุก 15 วิ ว่ามีประกาศถึงเวลาไหม (ตั้งใน robot/announcements.json) ----
