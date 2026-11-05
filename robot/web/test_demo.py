@@ -53,3 +53,16 @@ def test_demo_shim_loads_first_on_face_and_stats(tmp_path):
     assert face.index('src="demo.js"') < face.index('src="static/face.js"')
     stats = (tmp_path / "stats.html").read_text(encoding="utf-8")
     assert stats.index('src="demo.js"') < stats.index("fetch(\"/stats.json\")")
+
+
+def test_demo_includes_idle_videos(tmp_path):
+    # วิดีโอโหมดรอใน static/videos/ ต้องไปอยู่ในเดโมด้วย และ /attract ต้องคืนรายการวิดีโอนั้น
+    from build_demo import STATIC, VIDEO_EXTS
+    vids = sorted(p.name for p in (STATIC / "videos").iterdir() if p.suffix.lower() in VIDEO_EXTS)
+    assert vids
+    build(tmp_path)
+    js = (tmp_path / "demo.js").read_text(encoding="utf-8")
+    for name in vids:
+        assert (tmp_path / "static" / "videos" / name).is_file(), name
+        assert f'"static/videos/{name}"' in js, name
+    assert "videos: []" not in js

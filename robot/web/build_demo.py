@@ -13,6 +13,7 @@ from places import menu_tree
 WEB_DIR = Path(__file__).resolve().parent
 STATIC = WEB_DIR / "static"
 SARABURI_DATA = WEB_DIR.parent / "saraburi_data.json"
+VIDEO_EXTS = (".mp4", ".webm", ".ogv")   # เหมือนใน server.py
 
 
 def _relative(text: str) -> str:
@@ -39,7 +40,16 @@ def build(out: Path) -> None:
         assert first_script in html, f"{src}: หา {first_script} ไม่เจอ"
         html = html.replace(first_script, '<script src="demo.js"></script>\n' + first_script, 1)
         (out / dest).write_text(html, encoding="utf-8")
-    shutil.copy2(WEB_DIR / "demo" / "demo.js", out / "demo.js")
+    # วิดีโอโหมดรอ: ก๊อปไฟล์ใน static/videos/ ไปด้วย แล้วให้ /attract ในเดโมคืนรายการนี้
+    vids = sorted(f for f in (STATIC / "videos").iterdir() if f.suffix.lower() in VIDEO_EXTS)         if (STATIC / "videos").is_dir() else []
+    if vids:
+        (out / "static" / "videos").mkdir(exist_ok=True)
+        for f in vids:
+            shutil.copy2(f, out / "static" / "videos" / f.name)
+    demo_js = (WEB_DIR / "demo" / "demo.js").read_text(encoding="utf-8")
+    assert "videos: []" in demo_js, "demo.js: หา videos: [] ไม่เจอ"
+    demo_js = demo_js.replace("videos: []", "videos: " + json.dumps([f"static/videos/{f.name}" for f in vids]), 1)
+    (out / "demo.js").write_text(demo_js, encoding="utf-8")
 
     data = json.loads(SARABURI_DATA.read_text(encoding="utf-8"))
     menu = _relative(json.dumps(menu_tree(data), ensure_ascii=False))
