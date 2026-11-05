@@ -224,6 +224,14 @@
   #lightbox.open{display:flex}
   #lightbox img{max-width:95vw;max-height:90vh;border-radius:8px;object-fit:contain}
 
+  /* ---------- แนะนำสถานที่วิทยาลัย (ทัวร์ 3 มิติ เต็มจอ) ---------- */
+  #tourView{display:none;position:fixed;inset:0;z-index:140;background:#0f1724}
+  #tourView.open{display:block;animation:fade .4s both}
+  #tourView iframe{width:100%;height:100%;border:0;display:block}
+  #tourView .close{all:unset;cursor:pointer;position:absolute;right:18px;bottom:64px;min-height:56px;padding:0 22px;border-radius:999px;
+    display:flex;align-items:center;gap:8px;background:#d7263d;color:#fff;font-size:1.05rem;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  #tourView .close:active{transform:scale(.96)}
+
   /* ---------- ให้ดาวคำตอบ ---------- */
   .rate{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin-top:6px;font-size:.85rem;color:var(--muted)}
   .stars{display:flex;flex-direction:row-reverse}   /* กลับด้าน: hover ดาวไหน ดาวก่อนหน้าติดตาม (~ ใช้กับตัวถัดไป) */
@@ -283,6 +291,7 @@
       <div><b data-t="brand">ผู้ช่วยท่าหลวงฯ</b><small data-t="college">วิทยาลัยเทคนิคท่าหลวงซิเมนต์ไทยอนุสรณ์</small></div>
     </div>
     <button class="nav on" data-action="newChat">✏️ <span data-t="newChat">เริ่มคุยใหม่</span></button>
+    <button class="nav" data-action="campusTour">🏫 <span data-t="cTour">แนะนำสถานที่วิทยาลัย</span></button>
     <div class="sec" data-t="popular">คำถามยอดนิยม</div>
     <div id="sideQs"></div>
     <div class="side-foot"><b data-t="phone">โทร 0-3628-1295</b><br><span data-t="phoneNote">ข้อมูลไม่ครบ ติดต่อเจ้าหน้าที่ได้เลยครับ</span></div>
@@ -343,6 +352,8 @@
   </div>
 
 <div id="lightbox"><img src="" alt=""></div>
+<div id="tourView"><iframe title="แนะนำสถานที่วิทยาลัย 3 มิติ" allow="fullscreen"></iframe>
+  <button type="button" class="close" data-action="closeTour">✕ <span data-t="closeTour">ปิด กลับหน้าถามตอบ</span></button></div>
 
 <!-- โหมดรอ: วิดีโอวน (ไม่มีวิดีโอ = โชว์ตราวิทยาลัยแทน) -->
 <div id="attract" class="no-video" aria-hidden="true">
