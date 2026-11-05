@@ -45,7 +45,7 @@
     }
     if (u === "/rate" || u === "/greet") return json({ ok: true });
     if (u.startsWith("/tts")) return Promise.resolve(new Response("", { status: 503 }));   // เดโมไม่มีเสียง AI → ใช้เสียงในเครื่อง
-    if (u === "/attract") return json({ videos: [], after: 90 });     // โหมดรอโชว์ตราวิทยาลัย (ไม่มีวิดีโอบนเว็บ)
+    if (u === "/attract") return json({ videos: ["static/videos/lv_0_20261103085325.mp4"], after: 90 });     // build_demo.py ใส่รายการวิดีโอจาก static/videos/ ให้ (ไม่มี = โชว์ตราวิทยาลัย)
     if (u === "/announcements/due") return json({ due: [] });
     if (u === "/stats.json") return json(SAMPLE_STATS);
     if (u === "/ask/stream") {
