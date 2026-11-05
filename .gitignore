@@ -36,4 +36,4 @@ robot/web/static/videos/*
 robot/tts_cache/
 
 # วิดีโอต้นฉบับขนาดใหญ่ในแบบร่าง (เกิน 100 MB ขึ้น GitHub ไม่ได้)
-แบบร่าง/VTR27.mp4
+แบบร่าง/*.mp4
