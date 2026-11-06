@@ -29,6 +29,7 @@ def build(out: Path) -> None:
     for f in ("logo.jpg", "map.jpg", "campus_tour.html"):
         shutil.copy2(STATIC / f, out / "static" / f)
     shutil.copytree(STATIC / "places", out / "static" / "places", dirs_exist_ok=True)
+    shutil.copytree(STATIC / "vendor", out / "static" / "vendor", dirs_exist_ok=True)   # qrcode.js (QR ของลิงก์ในคำตอบ)
     for js in ("screen.js", "face.js"):
         (out / "static" / js).write_text(_relative((STATIC / js).read_text(encoding="utf-8")), encoding="utf-8")
 

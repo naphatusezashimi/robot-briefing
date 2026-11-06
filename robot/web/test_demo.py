@@ -13,7 +13,7 @@ def test_demo_has_all_files(tmp_path):
     for f in ("index.html", "demo.js", "menu.json", ".nojekyll",
               "face.html", "stats.html", "static/face.js",
               "static/screen.js", "static/logo.jpg", "static/map.jpg", "static/places/CREDITS.md",
-              "static/campus_tour.html"):
+              "static/campus_tour.html", "static/vendor/qrcode.js"):
         assert (tmp_path / f).is_file(), f
 
 
