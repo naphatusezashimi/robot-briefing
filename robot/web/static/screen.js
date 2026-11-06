@@ -14,7 +14,7 @@ const T = {
     send: "ส่ง", mic: "กดเพื่อพูด", replay: "ฟังอีกครั้ง", theme: "สลับโหมดมืด/สว่าง",
     cMap: "แผนผังวิทยาลัย", cPrograms: "สาขาที่เปิดสอน", cApply: "คุณสมบัติผู้สมัคร",
     cContact: "ช่องทางติดต่อ", cTrips: "ที่เที่ยวสระบุรี", cSouvenir: "ของฝากสระบุรี",
-    cTour: "แนะนำสถานที่วิทยาลัย", closeTour: "ปิด กลับหน้าถามตอบ",
+    cTour: "แนะนำสถานที่วิทยาลัย", openLink: "แตะเพื่อเปิด", closeTour: "ปิด กลับหน้าถามตอบ",
     hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะครับ",
     spoken: "🎤 พูด", mapAlt: "แผนผังวิทยาลัย",
     mapMsg: "นี่คือแผนผังวิทยาลัยครับ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
@@ -42,7 +42,7 @@ const T = {
     send: "Send", mic: "Tap to speak", replay: "Play again", theme: "Switch dark/light mode",
     cMap: "Campus map", cPrograms: "Programs offered", cApply: "Admission requirements",
     cContact: "Contact us", cTrips: "Places to visit", cSouvenir: "Local souvenirs",
-    cTour: "Campus tour (3D)", closeTour: "Close",
+    cTour: "Campus tour (3D)", openLink: "Tap to open", closeTour: "Close",
     hint: "Answers come from the college's own information. When in doubt, please ask our staff.",
     spoken: "🎤 Spoken", mapAlt: "Campus map",
     mapMsg: "Here's the campus map 🗺️ Tap the image to zoom in.",
@@ -120,8 +120,15 @@ $("themeBtn").addEventListener("click", () => {
 function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
 // AI ตอบเป็น markdown (**หัวข้อ**, * รายการ) — แปลงเป็นหัวข้อ/รายการสวย ๆ แทนการโชว์ดอกจัน
+// ลิงก์: [ข้อความ](https://...) → ปุ่มข้อความให้แตะ (ไม่โชว์ URL) / URL เปล่า ๆ → ปุ่ม "แตะเพื่อเปิด"
+// แตะแล้วเปิดเต็มจอในหน้าหุ่นเอง (openTour(url)) ไม่ออกจากหน้าถามตอบ
+const MD_LINK_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s<>"')]+)\)/g;
+const BARE_URL_RE = /(^|\s)(https?:\/\/[^\s<>"')]+?)([.,]?)(?=\s|$)/g;
+function linkHtml(url, label) { return '<a class="md-link" href="' + url + '" data-open-url="' + url + '">🔗 ' + label + "</a>"; }
 function inlineMd(s) {
   return s
+    .replace(MD_LINK_RE, (_, label, url) => linkHtml(url, label))
+    .replace(BARE_URL_RE, (_, pre, url, dot) => pre + linkHtml(url, t().openLink) + dot)
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, "$1$2")   // *ตัวเอียง* → ข้อความธรรมดา
     .replace(/\*/g, "");
@@ -153,6 +160,7 @@ function formatAnswer(text) {
 // เวลาพูด ไม่ต้องอ่านเครื่องหมาย markdown และอีโมจิ
 function plainForSpeech(text) {
   return text.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "")
+    .replace(MD_LINK_RE, "$1").replace(/https?:\/\/\S+/g, "")   // ไม่อ่าน URL ออกเสียง
     .replace(/^#{1,6}\s+/gm, "").replace(/\s\*\s+/g, " ").replace(/[*#•]/g, "").replace(/\s+/g, " ").trim();
 }
 
@@ -656,13 +664,17 @@ document.querySelectorAll("#langSeg button").forEach((b) => b.addEventListener("
 // ---- แนะนำสถานที่วิทยาลัย: ทัวร์ 3 มิติ (static/campus_tour.html) เต็มจอ — โหลดตอนเปิด ปิดแล้วทิ้ง (คืนหน่วยความจำ WebGL) ----
 const TOUR_SRC = "/static/campus_tour.html", TOUR_IDLE_MS = 5 * 60 * 1000;
 const tourEl = $("tourView"), tourFrame = tourEl.querySelector("iframe");
-let tourOpen = false;
-function openTour() {
+// ใช้เปิดลิงก์ในคำตอบด้วย (เช่น ฟอร์มสมัครเรียนออนไลน์) — เว็บนอกดักการแตะใน iframe ไม่ได้ (คนละ origin)
+// เลยให้เวลานานกว่าก่อนกลับโหมดรอ จะได้กรอกฟอร์มทัน
+const EXTERNAL_IDLE_MS = 15 * 60 * 1000;
+let tourOpen = false, tourIdleMs = TOUR_IDLE_MS;
+function openTour(src = TOUR_SRC) {
   if (tourOpen) return;
   if (recog && listening) { recog.stop(); listening = false; }
   stopSpeech();
   tourOpen = true; idleSince = Date.now();
-  tourFrame.src = TOUR_SRC;
+  tourIdleMs = src === TOUR_SRC ? TOUR_IDLE_MS : EXTERNAL_IDLE_MS;
+  tourFrame.src = src;
   tourEl.classList.add("open");
 }
 function closeTour() {
@@ -683,6 +695,8 @@ tourFrame.addEventListener("load", () => {
 const lightbox = $("lightbox");
 lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 chat.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-open-url]");
+  if (link) { e.preventDefault(); openTour(link.dataset.openUrl); return; }
   const star = e.target.closest("[data-stars]");
   if (star) { sendRating(star); return; }
   if (e.target.classList.contains("map-thumb") || e.target.classList.contains("place-photo")) {
@@ -743,7 +757,7 @@ document.addEventListener("keydown", () => { idleSince = Date.now(); }, true);
 setInterval(() => {
   if (attractOn || state !== "idle" || listening || greeting || announcing) return;
   // เปิดทัวร์ทิ้งไว้: ให้เวลานานกว่าปกติ (ทัวร์อัตโนมัติยาว ~3-4 นาที) แล้วค่อยปิดเข้าโหมดรอ
-  const after = (attractCfg.after || 90) * 1000, limit = tourOpen ? Math.max(after, TOUR_IDLE_MS) : after;
+  const after = (attractCfg.after || 90) * 1000, limit = tourOpen ? Math.max(after, tourIdleMs) : after;
   if (Date.now() - idleSince > limit) { closeTour(); startAttract(); }
 }, 2000);
 
