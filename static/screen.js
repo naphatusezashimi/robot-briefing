@@ -14,7 +14,7 @@ const T = {
     send: "ส่ง", mic: "กดเพื่อพูด", replay: "ฟังอีกครั้ง", theme: "สลับโหมดมืด/สว่าง",
     cMap: "แผนผังวิทยาลัย", cPrograms: "สาขาที่เปิดสอน", cApply: "คุณสมบัติผู้สมัคร",
     cContact: "ช่องทางติดต่อ", cTrips: "ที่เที่ยวสระบุรี", cSouvenir: "ของฝากสระบุรี",
-    cTour: "แนะนำสถานที่วิทยาลัย", openLink: "แตะเพื่อเปิด", closeTour: "ปิด กลับหน้าถามตอบ",
+    cTour: "แนะนำสถานที่วิทยาลัย", openLink: "แตะเพื่อเปิด", scanQr: "📱 สแกนเปิดในโทรศัพท์", closeTour: "ปิด กลับหน้าถามตอบ",
     hint: "หุ่นยนต์ตอบจากข้อมูลของวิทยาลัย ถ้าไม่แน่ใจ สอบถามเจ้าหน้าที่ได้นะครับ",
     spoken: "🎤 พูด", mapAlt: "แผนผังวิทยาลัย",
     mapMsg: "นี่คือแผนผังวิทยาลัยครับ 🗺️ แตะที่รูปเพื่อขยายดูได้เลย",
@@ -42,7 +42,7 @@ const T = {
     send: "Send", mic: "Tap to speak", replay: "Play again", theme: "Switch dark/light mode",
     cMap: "Campus map", cPrograms: "Programs offered", cApply: "Admission requirements",
     cContact: "Contact us", cTrips: "Places to visit", cSouvenir: "Local souvenirs",
-    cTour: "Campus tour (3D)", openLink: "Tap to open", closeTour: "Close",
+    cTour: "Campus tour (3D)", openLink: "Tap to open", scanQr: "📱 Scan to open on your phone", closeTour: "Close",
     hint: "Answers come from the college's own information. When in doubt, please ask our staff.",
     spoken: "🎤 Spoken", mapAlt: "Campus map",
     mapMsg: "Here's the campus map 🗺️ Tap the image to zoom in.",
@@ -124,7 +124,19 @@ function escapeHtml(s) { const d = document.createElement("div"); d.textContent 
 // แตะแล้วเปิดเต็มจอในหน้าหุ่นเอง (openTour(url)) ไม่ออกจากหน้าถามตอบ
 const MD_LINK_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s<>"')]+)\)/g;
 const BARE_URL_RE = /(^|\s)(https?:\/\/[^\s<>"')]+?)([.,]?)(?=\s|$)/g;
-function linkHtml(url, label) { return '<a class="md-link" href="' + url + '" data-open-url="' + url + '">🔗 ' + label + "</a>"; }
+// ทุกลิงก์มี QR ให้สแกนเปิดในโทรศัพท์ด้วย (static/vendor/qrcode.js สร้างในเครื่อง ไม่ต้องต่อเน็ต — ไม่มีไลบรารี = โชว์แค่ปุ่ม)
+function qrSvg(url) {
+  if (typeof qrcode !== "function") return "";
+  try {
+    const q = qrcode(0, "M"); q.addData(url.replace(/&amp;/g, "&")); q.make();
+    return q.createSvgTag({ cellSize: 4, margin: 8, scalable: true });
+  } catch (e) { return ""; }
+}
+function linkHtml(url, label) {
+  const btn = '<a class="md-link" href="' + url + '" data-open-url="' + url + '">🔗 ' + label + "</a>";
+  const qr = qrSvg(url);
+  return qr ? '<span class="link-card">' + btn + '<span class="link-qr">' + qr + "<small>" + t().scanQr + "</small></span></span>" : btn;
+}
 function inlineMd(s) {
   return s
     .replace(MD_LINK_RE, (_, label, url) => linkHtml(url, label))

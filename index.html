@@ -163,6 +163,10 @@
   .a-body .md-link{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:6px 20px;margin:4px 0;border-radius:999px;
     background:linear-gradient(90deg,var(--g1),var(--g2));color:#fff;font-weight:600;text-decoration:none}
   .a-body .md-link:active{transform:scale(.97)}
+  .a-body .link-card{display:inline-flex;vertical-align:middle;flex-wrap:wrap;align-items:center;gap:14px 18px;margin:6px 0}
+  .a-body .link-qr{display:inline-flex;flex-direction:column;align-items:center;gap:4px}
+  .a-body .link-qr svg{width:150px;height:150px;border-radius:10px;display:block}
+  .a-body .link-qr small{font-size:.8rem;opacity:.8}
   .tools{display:flex;gap:2px;margin:-4px 0 0 -8px}
   .tools button{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
   .tools button:hover{background:var(--hover);color:var(--ink)}
@@ -376,6 +380,7 @@
 <div id="announce" role="alert">
   <div class="card"><div class="tag">📢 <span data-t="announceTag">ประกาศ</span></div><p id="announceText"></p></div>
 </div>
+<script src="static/vendor/qrcode.js"></script>
 <script src="demo.js"></script>
 <script src="static/screen.js"></script>
 </body>
