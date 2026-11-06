@@ -31,3 +31,5 @@
 | `huapli.jpg` | ตลาดหัวปลี |
 | `phasadet.jpg` | ผาเสด็จ |
 | `muaklek.jpg` | น้ำตกมวกเหล็ก |
+| `thamkrabok.jpg` | วัดถ้ำกระบอก |
+| `watkaengkhoi.jpg` | วัดแก่งคอย |
