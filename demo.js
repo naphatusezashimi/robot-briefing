@@ -11,7 +11,7 @@
       "Try tapping **🏞️ Places to visit**, **🛍️ Local souvenirs** or **🗺️ Campus map**, or type **apply** to see the online application button, and rate this answer below ⭐",
   };
   // ถามเรื่องสมัครเรียน → คำตอบสำเร็จรูปพร้อมปุ่มสมัครเรียนออนไลน์ (หุ่นจริงตอบเรื่องนี้ด้วย AI จาก college_data.json)
-  const ADMIT_URL = "https://ssrenz1717-code.github.io/thaluang-admission/";
+  const ADMIT_URL = "https://tctatc.github.io/thaluang-admission/";
   const ADMIT_RE = /สมัคร|apply|admission|enrol|register/i;
   const ADMIT = {
     th: "สมัครเรียนออนไลน์ได้เลยครับ 🎓 (ระบบสมัครเวอร์ชันทดลอง)\n\n" +
