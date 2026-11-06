@@ -682,6 +682,7 @@ function closeTour() {
   tourOpen = false; idleSince = Date.now();
   tourEl.classList.remove("open");
   tourFrame.src = "about:blank";
+  stopSpeech();   // ปิดทัวร์ตอนหุ่นยังพูดชื่อสถานที่อยู่ → หยุดด้วย
 }
 // แตะ/ลากในทัวร์ไม่ถึง document หน้านี้ → ดักใน iframe เองเพื่อนับว่ายังมีคนใช้อยู่ (ไฟล์เดียวกัน origin เดียวกัน)
 tourFrame.addEventListener("load", () => {

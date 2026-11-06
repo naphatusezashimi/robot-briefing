@@ -546,7 +546,7 @@ function buildList(){
   ORDER.forEach((c,i)=>{const p=byCode[c];const g=typeName(p);if(g!==grp){html+=`<h4>${g}</h4>`;grp=g;}
     html+=`<div class="stop" data-i="${i+1}"><i style="background:${p.col};color:${tmpC.set(p.col).getHSL({}).l>.7?'#1b2433':'#fff'}">${c}</i><span>${p.n}</span></div>`;});
   d.innerHTML=html;
-  d.querySelectorAll('.stop').forEach(el=>el.onclick=()=>{const i=+el.dataset.i;if(tour.mode==='tour'){goTo(i,'tour');}else goTo(i,'single');if(innerWidth<700)d.classList.remove('open');});
+  d.querySelectorAll('.stop').forEach(el=>el.onclick=()=>{const i=+el.dataset.i;if(tour.mode==='tour'){goTo(i,'tour');}else goTo(i,'single');sayName(STOPS[i].p);if(innerWidth<700)d.classList.remove('open');});
 }
 function updateList(){document.querySelectorAll('.stop').forEach(el=>el.classList.toggle('cur',tour.mode!=='free'&&+el.dataset.i===tour.idx));}
 $('bPlay').onclick=()=>{if(tour.mode==='tour'){stopTour();if(rec.active)stopRec();}else startTour();};
@@ -557,6 +557,31 @@ $('bRec').onclick=()=>rec.active?stopRec():startRec();
 $('bList').onclick=()=>$('drawer').classList.toggle('open');
 renderer.domElement.addEventListener('pointerdown',()=>{if(tour.mode==='single')stopTour();});
 renderer.domElement.addEventListener('wheel',()=>{if(tour.mode==='single')stopTour();},{passive:true});
+
+/* ---------------- แตะป้ายชื่อ → หุ่นพูดชื่อสถานที่ ----------------
+   เปิดในหน้าหุ่น (iframe) ใช้เสียงเดียวกับหุ่น (parent.speak) / เปิดหน้านี้เดี่ยว ๆ ใช้เสียงในเครื่อง
+   แยกแตะออกจากลากหมุน: กดแล้วปล่อยเร็ว ๆ ไม่ขยับเกิน 8px ถึงนับว่าแตะ */
+function sayName(p){
+  if(!p)return;const text=p.n;
+  try{if(window.parent!==window&&typeof window.parent.speak==='function'){window.parent.speak(text,'th');return;}}catch(e){}
+  if('speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='th-TH';speechSynthesis.speak(u);}
+}
+const picker=new THREE.Raycaster(),pickPt=new THREE.Vector2();let downAt=null;
+function pickLabel(ev){
+  const r=renderer.domElement.getBoundingClientRect();
+  pickPt.set((ev.clientX-r.left)/r.width*2-1,-((ev.clientY-r.top)/r.height)*2+1);
+  picker.setFromCamera(pickPt,camera);
+  const hit=picker.intersectObjects(PL.map(p=>p.label).filter(s=>s&&s.visible),false)[0];
+  return hit?PL.find(p=>p.label===hit.object):null;
+}
+renderer.domElement.addEventListener('pointerdown',ev=>{downAt={x:ev.clientX,y:ev.clientY,t:performance.now()};});
+renderer.domElement.addEventListener('pointerup',ev=>{
+  const d=downAt;downAt=null;
+  if(!d||Math.hypot(ev.clientX-d.x,ev.clientY-d.y)>8||performance.now()-d.t>600)return;
+  const p=pickLabel(ev);if(!p)return;
+  sayName(p);
+  const sp=p.label,b=sp.userData.base;sp.scale.set(b.x*1.4,b.y*1.4,1);setTimeout(highlight,350);   // ป้ายเด้งให้รู้ว่าแตะโดน
+});
 
 /* ---------------- loop ---------------- */
 function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.fov=w<h?58:42;camera.updateProjectionMatrix();
