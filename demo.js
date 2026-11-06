@@ -5,10 +5,21 @@
   const realFetch = window.fetch.bind(window);
   const NOTE = {
     th: "นี่คือเดโมหน้าจอครับ 🙂 เวอร์ชันบนเว็บยังตอบคำถามด้วย AI ไม่ได้ (หุ่นตัวจริงที่วิทยาลัยตอบได้)\n\n" +
-      "ลองแตะ **🏞️ ที่เที่ยวสระบุรี** หรือ **🛍️ ของฝากสระบุรี** หรือ **🗺️ แผนผังวิทยาลัย** ดูได้เลยนะครับ " +
+      "ลองแตะ **🏞️ ที่เที่ยวสระบุรี** หรือ **🛍️ ของฝากสระบุรี** หรือ **🗺️ แผนผังวิทยาลัย** ดูได้เลยนะครับ หรือพิมพ์ถามว่า **สมัครเรียน** เพื่อดูปุ่มสมัครเรียนออนไลน์ " +
       "แล้วลองให้ดาวคำตอบนี้ข้างล่างได้ครับ ⭐",
     en: "This is a screen demo 🙂 The web version can't answer with AI (the real robot at the college can).\n\n" +
-      "Try tapping **🏞️ Places to visit**, **🛍️ Local souvenirs** or **🗺️ Campus map**, and rate this answer below ⭐",
+      "Try tapping **🏞️ Places to visit**, **🛍️ Local souvenirs** or **🗺️ Campus map**, or type **apply** to see the online application button, and rate this answer below ⭐",
+  };
+  // ถามเรื่องสมัครเรียน → คำตอบสำเร็จรูปพร้อมปุ่มสมัครเรียนออนไลน์ (หุ่นจริงตอบเรื่องนี้ด้วย AI จาก college_data.json)
+  const ADMIT_URL = "https://ssrenz1717-code.github.io/thaluang-admission/";
+  const ADMIT_RE = /สมัคร|apply|admission|enrol|register/i;
+  const ADMIT = {
+    th: "สมัครเรียนออนไลน์ได้เลยครับ 🎓 (ระบบสมัครเวอร์ชันทดลอง)\n\n" +
+      "* [คลิกเพื่อสมัครเรียนออนไลน์](" + ADMIT_URL + ") 💻\n\n" +
+      "หรือติดต่อสมัครที่งานทะเบียนของวิทยาลัย โทร 0-3628-1295 ครับ 😊",
+    en: "You can apply online 🎓 (trial version of the application system)\n\n" +
+      "* [Click to apply online](" + ADMIT_URL + ") 💻\n\n" +
+      "Or apply at the college registration office, Tel. 0-3628-1295 😊",
   };
   // ข้อมูลตัวอย่างสำหรับหน้าสถิติ (หุ่นจริงนับจากคนที่ใช้งาน)
   const SAMPLE_STATS = {
@@ -49,10 +60,11 @@
     if (u === "/announcements/due") return json({ due: [] });
     if (u === "/stats.json") return json(SAMPLE_STATS);
     if (u === "/ask/stream") {
-      let lang = "th";
-      try { lang = JSON.parse(opts.body).lang === "en" ? "en" : "th"; } catch (e) {}
+      let lang = "th", q = "";
+      try { const b = JSON.parse(opts.body); lang = b.lang === "en" ? "en" : "th"; q = String(b.question || ""); } catch (e) {}
       const line = (o) => JSON.stringify(o) + "\n";
-      return Promise.resolve(new Response(line({ t: NOTE[lang] }) + line({ done: true, image: null, photos: [] })));
+      const text = ADMIT_RE.test(q) ? ADMIT[lang] : NOTE[lang];
+      return Promise.resolve(new Response(line({ t: text }) + line({ done: true, image: null, photos: [] })));
     }
     return realFetch(url, opts);
   };
