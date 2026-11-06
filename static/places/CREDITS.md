@@ -30,3 +30,4 @@
 | `dairyfarm.jpg` | ฟาร์มโคนมไทย-เดนมาร์ค |
 | `huapli.jpg` | ตลาดหัวปลี |
 | `phasadet.jpg` | ผาเสด็จ |
+| `muaklek.jpg` | น้ำตกมวกเหล็ก |
